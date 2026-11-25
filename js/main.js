@@ -6,6 +6,8 @@ import { t, applyI18n } from './core/i18n.js';
 import { initTheme, applyTheme } from './core/theme.js';
 import { route, startRouter, stopRouter } from './core/router.js';
 import { $, reducedMotion } from './core/ui.js';
+import { applyPrefs } from './core/prefs.js';
+import { initFx } from './core/fx.js';
 
 const ROUTES = [
   ['/overview', () => import('./views/overview.js'), 'nav.overview'],
@@ -78,6 +80,8 @@ document.addEventListener('click', (e) => { if (e.target.closest('[data-reload]'
 
 (async function start() {
   initTheme();
+  applyPrefs();
+  initFx();
   applyI18n(document);
   if (location.hash.startsWith('#/')) sessionStorage.setItem('af.returnTo', location.hash);
   $('#af-boot-text') && ($('#af-boot-text').textContent = t('boot.checking'));

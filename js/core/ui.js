@@ -36,7 +36,7 @@ export function el(tag, attrs = {}, content = '') {
 export const debounce = (fn, ms = 400) => { let id; return (...a) => { clearTimeout(id); id = setTimeout(() => fn(...a), ms); }; };
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
-export const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+export const reducedMotion = () => (typeof document !== 'undefined' && document.body?.classList.contains('fx-reduced')) || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 export const isTouch = () => window.matchMedia('(pointer: coarse)').matches;
 export const isMobile = () => window.matchMedia('(max-width: 860px)').matches;
 

@@ -86,13 +86,17 @@ export const mediaUrls = (ps) => signedUrls('portfolio-media', ps);
 export async function callFunction(name, body) {
   const { data, error } = await supabase.functions.invoke(name, { body });
   if (error) {
-    let code = 'server_error';
+    let code = 'server_error'; let detail = ''; let status = error.context?.status || 0;
     try {
       const ctx = error.context;
-      if (ctx && typeof ctx.json === 'function') { const j = await ctx.json(); code = j.error || code; Object.assign(error, j); }
+      if (ctx && typeof ctx.text === 'function') {
+        const txt = await ctx.text();
+        try { const j = JSON.parse(txt); code = j.error || (status === 401 ? 'unauthorized' : code); detail = j.detail || j.message || j.msg || ''; Object.assign(error, j); }
+        catch { detail = txt.slice(0, 160); }
+      }
     } catch (_) { /* ignore */ }
     if (String(error.message || '').includes('Failed to send')) code = 'network';
-    const e = new Error(code); e.code = code; e.details = error; throw e;
+    const e = new Error(code); e.code = code; e.status = status; e.detail = String(detail || ''); e.details = error; throw e;
   }
   return data;
 }

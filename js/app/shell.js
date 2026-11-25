@@ -211,6 +211,7 @@ export function notifText(n) {
     comment: () => t('notif.comment', { title: p.title || '' }),
     review_request: () => t('notif.review_request', { title: p.title || '', version: p.version || 1 }),
     review_decision: () => t('notif.review_decision', { title: p.title || '' }),
+    new_user: () => t('notif.new_user', { email: p.email || '' }),
   };
   return (map[n.type] || (() => t('notif.generic')))();
 }

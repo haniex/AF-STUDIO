@@ -41,14 +41,17 @@ js/
                         My Projects (+детали: файлы, согласование, переписка, история), Files, Messages,
                         Favorites, Moodboard, Notifications, Settings
   components/         — chat.js (переписка, realtime), review.js (рендеры с метками)
+  three/              — 10 детализированных процедурных 3D-моделей, студийное окружение, 3D-витрина главной
   legacy/widgets.js   — перенесённые виджеты оригинала (hero 3D, таймлайн процесса, карусель отзывов, tilt)
   admin/              — дашборд, заявки, обращения, пользователи, CRUD контента, цены, база знаний и настройки AI, журнал
   data/               — контент оригинального сайта (этапы процесса, «Обо мне»)
 supabase/
   migrations/         — схема, RLS, Storage, сид-данные (перенесены 1:1 с сайта)
-  functions/          — ai-chat, delete-account, notify-email
+  functions/          — ai-chat, delete-account, notify
+  dashboard/          — те же функции одним файлом для браузерного редактора Supabase
+  check.sql, check-ai.sql, make-admin.sql — проверки и назначение администратора
 tests/unit.test.mjs   — юнит-тесты чистой логики (`node --test tests/`)
-docs/                 — AUDIT, SETUP (что настроить владельцу), SECURITY, TESTING
+docs/                 — AUDIT, SETUP (что настроить владельцу), UPDATE-2.1 (Telegram, Google, админка), SECURITY, TESTING
 ```
 
 ## Быстрый старт

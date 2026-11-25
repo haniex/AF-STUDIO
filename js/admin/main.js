@@ -8,6 +8,8 @@ import { route, startRouter } from '../core/router.js';
 import { html, icon, initials, $, $$, reducedMotion } from '../core/ui.js';
 import { setLang, getLang, onLang } from '../core/i18n.js';
 import { a } from './i18n.js';
+import { applyPrefs } from '../core/prefs.js';
+import { initFx } from '../core/fx.js';
 
 const NAV = [
   ['/dashboard', 'dashboard', 'overview'], ['/projects', 'projects', 'projects'], ['/messages', 'messages', 'messages'], ['/users', 'users', 'user'],
@@ -72,6 +74,8 @@ function shell() {
 
 (async function start() {
   initTheme();
+  applyPrefs();
+  initFx();
   if (!isConfigured()) return denied();
   let res;
   try { res = await bootstrap(); } catch { return denied(); }

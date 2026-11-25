@@ -55,6 +55,7 @@ const DICT = {
       provider_timeout: 'AI отвечал слишком долго. Попробуйте короче сформулировать вопрос.', too_long: 'Сообщение слишком длинное.',
       invalid_password: 'Неверный пароль.', last_admin: 'Нельзя удалить единственного администратора.', confirmation_required: 'Введите слово подтверждения.',
       already_decided: 'Решение по этой версии уже принято.',
+      server_config: 'Сервер AF AI настроен не до конца (нет доступа к базе). Сообщите администратору.',
     },
     nav: {
       groupStudio: 'Студия', groupCreate: 'Создание', groupSpace: 'Моё пространство',
@@ -71,7 +72,7 @@ const DICT = {
       title: 'Уведомления', empty: 'Новых уведомлений нет', markAll: 'Прочитать все',
       project_created: 'Новая заявка {no}', project_status: '{no}: статус — «{status}»', project_done: '{no} завершён 🎉',
       message: 'Новое сообщение: {subject}', comment: 'Комментарий к рендеру: {title}', review_request: 'Запрос согласования: {title} (v{version})',
-      review_decision: 'Решение клиента по {title}', generic: 'Уведомление',
+      review_decision: 'Решение клиента по {title}', new_user: 'Новый пользователь: {email}', generic: 'Уведомление',
     },
     overview: {
       hello: 'Здравствуйте, {name}', sub: 'Ваше пространство AF STUDIO', projects: 'Проектов', active: 'Активных',
@@ -83,6 +84,7 @@ const DICT = {
       onbTitle1: 'Добро пожаловать в AF STUDIO', onbText1: 'Здесь собраны работы студии, инструменты планирования и ваш личный кабинет.',
       onbTitle2: 'Опишите задачу', onbText2: 'Конструктор проекта и AF AI помогут сформулировать ТЗ, а калькулятор — оценить бюджет.',
       onbTitle3: 'Следите за работой', onbText3: 'Статусы, файлы, согласование рендеров и переписка — в «Моих проектах».', onbDone: 'Начать',
+      adminTitle: 'Вы вошли как администратор', adminText: 'Заявки, статусы, файлы клиентов, контент, цены и AI — в панели AF Admin.',
     },
     portfolio: {
       title: 'Портфолио', sub: 'Каждый проект — это история, рассказанная светом, формой и материалом.', works: 'Работы',
@@ -141,11 +143,12 @@ const DICT = {
       askAi: 'Обсудить с AF AI', empty: 'Тарифы ещё не настроены администратором.',
     },
     lab: {
+      screenshot: 'Скриншот', wireframe: 'Каркас (wireframe)', background: 'Фон', speed: 'Скорость вращения', bgs: { dark: 'Студия', warm: 'Тёплый', light: 'Светлый', grid: 'Сетка' },
       title: '3D Lab', sub: 'Интерактивные демонстрации: вращайте, приближайте, меняйте материалы и свет.',
       models: 'Модели', demo: 'Демо-сцена', demoNote: 'Демонстрационный объект для показа возможностей viewer.',
       color: 'Цвет', material: 'Материал', light: 'Освещение', camera: 'Ракурс', autorotate: 'Автовращение', fullscreen: 'На весь экран',
       zoomIn: 'Приблизить', zoomOut: 'Отдалить', reset: 'Сбросить вид', loadLocal: 'Открыть свой GLB', loading: 'Загрузка модели…',
-      loadError: 'Не удалось загрузить модель.', mats: { original: 'Исходный', gloss: 'Глянец', metal: 'Металл', glass: 'Стекло', matte: 'Мат', gold: 'Золото' },
+      loadError: 'Не удалось загрузить модель.', mats: { original: 'Исходный', gloss: 'Глянец', metal: 'Металл', glass: 'Стекло', matte: 'Мат', gold: 'Золото', carbon: 'Карбон' },
       lights: { studio: 'Студия', sunset: 'Закат', dramatic: 'Драма', neon: 'Неон' }, cams: { front: 'Спереди', side: 'Сбоку', top: 'Сверху', hero: '3/4' },
       hint: 'Перетаскивайте для вращения · колесо/щипок для масштаба', webglOff: 'Ваш браузер не поддерживает WebGL.',
       bottle: 'Флакон', knot: 'Узел', headset: 'Наушники', localNote: 'Файл открывается только в вашем браузере и никуда не загружается.',
@@ -189,6 +192,10 @@ const DICT = {
       notifyInapp: 'Уведомления в платформе', notifyEmail: 'Уведомления на email', session: 'Сессия', logout: 'Выйти', logoutAll: 'Выйти на всех устройствах',
       danger: 'Опасная зона', deleteAccount: 'Удалить аккаунт', deleteText: 'Аккаунт, проекты, файлы, переписка и история AI будут удалены безвозвратно.',
       deleteConfirmWord: 'Введите УДАЛИТЬ для подтверждения', deleted: 'Аккаунт удалён', oauthUser: 'Вход через Google — пароль не используется.',
+      visual: 'Эффекты и 3D', visualHint: 'Настройки этого устройства. Уменьшите эффекты на слабом телефоне или ноутбуке.',
+      animations: 'Анимации', animFull: 'Полные', animReduced: 'Минимум', quality3d: 'Качество 3D', q: { high: 'Высокое', medium: 'Среднее', low: 'Экономное' },
+      glow: 'Подсветка за курсором', account: 'Аккаунт', registered: 'Регистрация', lastLogin: 'Последний вход', provider: 'Способ входа',
+      emailStatus: 'Email', confirmed: 'Подтверждён', notConfirmed: 'Не подтверждён', export: 'Скачать мои данные (JSON)',
     },
     legal: { terms: 'Условия использования', privacy: 'Политика конфиденциальности' },
   },
@@ -238,6 +245,7 @@ const DICT = {
       provider_busy: 'AI service is busy. Retry in a minute.', provider_error: 'AI service did not respond. Try later.',
       provider_timeout: 'AI took too long. Try a shorter question.', too_long: 'Message is too long.', invalid_password: 'Wrong password.',
       last_admin: 'You cannot delete the only administrator.', confirmation_required: 'Type the confirmation word.', already_decided: 'A decision for this version was already made.',
+      server_config: 'The AF AI server is not fully configured (no database access). Please tell the administrator.',
     },
     nav: {
       groupStudio: 'Studio', groupCreate: 'Create', groupSpace: 'My space', overview: 'Overview', portfolio: 'Portfolio', services: 'Services',
@@ -249,7 +257,7 @@ const DICT = {
     notif: {
       title: 'Notifications', empty: 'No new notifications', markAll: 'Mark all read', project_created: 'New request {no}',
       project_status: '{no}: status — “{status}”', project_done: '{no} completed 🎉', message: 'New message: {subject}',
-      comment: 'Review comment: {title}', review_request: 'Approval requested: {title} (v{version})', review_decision: 'Client decision on {title}', generic: 'Notification',
+      comment: 'Review comment: {title}', review_request: 'Approval requested: {title} (v{version})', review_decision: 'Client decision on {title}', new_user: 'New user: {email}', generic: 'Notification',
     },
     overview: {
       hello: 'Hello, {name}', sub: 'Your AF STUDIO space', projects: 'Projects', active: 'Active', favorites: 'Favorites', unread: 'Unread',
@@ -259,6 +267,7 @@ const DICT = {
       onbTitle1: 'Welcome to AF STUDIO', onbText1: 'Studio works, planning tools and your personal client space — all here.',
       onbTitle2: 'Describe your task', onbText2: 'The project builder and AF AI help you write a brief; the calculator estimates the budget.',
       onbTitle3: 'Follow the work', onbText3: 'Statuses, files, render approvals and chat live in “My Projects”.', onbDone: 'Get started',
+      adminTitle: 'You are signed in as administrator', adminText: 'Requests, statuses, client files, content, pricing and AI live in AF Admin.',
     },
     portfolio: {
       title: 'Portfolio', sub: 'Every project is a story told through light, form and material.', works: 'Works', compare: 'Before / After',
@@ -311,10 +320,11 @@ const DICT = {
       included: 'angles included: {n}', askAi: 'Discuss with AF AI', empty: 'Rates have not been configured by the administrator yet.',
     },
     lab: {
+      screenshot: 'Screenshot', wireframe: 'Wireframe', background: 'Background', speed: 'Rotation speed', bgs: { dark: 'Studio', warm: 'Warm', light: 'Light', grid: 'Grid' },
       title: '3D Lab', sub: 'Interactive demos: rotate, zoom, switch materials and lighting.', models: 'Models', demo: 'Demo scene',
       demoNote: 'Demonstration object showcasing the viewer.', color: 'Color', material: 'Material', light: 'Lighting', camera: 'Camera', autorotate: 'Auto-rotate',
       fullscreen: 'Fullscreen', zoomIn: 'Zoom in', zoomOut: 'Zoom out', reset: 'Reset view', loadLocal: 'Open your GLB', loading: 'Loading model…',
-      loadError: 'Could not load the model.', mats: { original: 'Original', gloss: 'Gloss', metal: 'Metal', glass: 'Glass', matte: 'Matte', gold: 'Gold' },
+      loadError: 'Could not load the model.', mats: { original: 'Original', gloss: 'Gloss', metal: 'Metal', glass: 'Glass', matte: 'Matte', gold: 'Gold', carbon: 'Carbon' },
       lights: { studio: 'Studio', sunset: 'Sunset', dramatic: 'Dramatic', neon: 'Neon' }, cams: { front: 'Front', side: 'Side', top: 'Top', hero: '3/4' },
       hint: 'Drag to rotate · wheel/pinch to zoom', webglOff: 'Your browser does not support WebGL.', bottle: 'Bottle', knot: 'Knot', headset: 'Headphones',
       localNote: 'The file opens only in your browser and is not uploaded anywhere.',
@@ -355,6 +365,10 @@ const DICT = {
       logout: 'Sign out', logoutAll: 'Sign out on all devices', danger: 'Danger zone', deleteAccount: 'Delete account',
       deleteText: 'Your account, projects, files, messages and AI history will be permanently deleted.', deleteConfirmWord: 'Type DELETE to confirm',
       deleted: 'Account deleted', oauthUser: 'Signed in with Google — no password is used.',
+      visual: 'Effects & 3D', visualHint: 'Settings for this device. Reduce effects on a slow phone or laptop.',
+      animations: 'Animations', animFull: 'Full', animReduced: 'Minimal', quality3d: '3D quality', q: { high: 'High', medium: 'Medium', low: 'Saver' },
+      glow: 'Cursor glow', account: 'Account', registered: 'Registered', lastLogin: 'Last sign-in', provider: 'Sign-in method',
+      emailStatus: 'Email', confirmed: 'Confirmed', notConfirmed: 'Not confirmed', export: 'Download my data (JSON)',
     },
     legal: { terms: 'Terms of use', privacy: 'Privacy policy' },
   },

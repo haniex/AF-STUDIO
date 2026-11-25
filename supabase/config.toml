@@ -1,10 +1,10 @@
 # Supabase CLI config (partial). `supabase init` will merge the rest.
 [functions.ai-chat]
-verify_jwt = true
+verify_jwt = false  # the function verifies the user token itself (avoids CORS issues on preflight)
 
 [functions.delete-account]
-verify_jwt = true
+verify_jwt = false  # verified inside the function
 
 # Called by a Database Webhook; authenticated with the x-webhook-secret header instead of a user JWT.
-[functions.notify-email]
+[functions.notify]
 verify_jwt = false

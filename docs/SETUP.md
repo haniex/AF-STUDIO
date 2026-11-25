@@ -14,7 +14,11 @@
 supabase link --project-ref <ref>
 supabase db push          # применит supabase/migrations/* по порядку
 ```
-или вставьте файлы по очереди в **SQL Editor**: `…0001_schema.sql` → `…0002_rls.sql` → `…0003_storage.sql` → `…0004_seed.sql`.
+или вставьте файлы по очереди в **SQL Editor**: `…0001_schema.sql` → `…0002_rls.sql` → `…0003_storage.sql` → `…0004_seed.sql` → `…0005_grants.sql`.
+
+> `0005_grants.sql` обязателен: новые проекты Supabase не выдают API-ролям права на таблицы автоматически
+> (без него — ошибка `42501 permission denied`). Проверка установки — `supabase/check.sql`.
+> Отключите автоперевод страницы в браузере, иначе он «переводит» SQL.
 
 ## 3. Auth
 **Authentication → URL Configuration**
@@ -44,10 +48,18 @@ on conflict do nothing;
 Дальнейшие роли назначаются в AF Admin → Пользователи (проверка на сервере, `admin_set_role`).
 
 ## 5. Edge Functions и секреты
+
+**Через браузер (без CLI):** Edge Functions → Deploy a new function → Via Editor → имя `ai-chat` /
+`delete-account` → вставить файл из `supabase/dashboard/` → Deploy → в настройках функции **отключить Verify JWT**
+(функции сами проверяют пользователя). Секреты: Edge Functions → Secrets:
+`GEMINI_API_KEY`, `ALLOWED_ORIGINS=https://haniex.github.io`, `AF_SERVICE_KEY` = ключ `sb_secret_…`
+из Project Settings → API Keys (нужен, если устаревший service_role отключён).
+
+**Через CLI:**
 ```bash
 supabase functions deploy ai-chat
 supabase functions deploy delete-account
-supabase functions deploy notify-email --no-verify-jwt
+supabase functions deploy notify --no-verify-jwt
 supabase secrets set GEMINI_API_KEY=...            # https://aistudio.google.com/apikey
 supabase secrets set ALLOWED_ORIGINS=https://haniex.github.io
 supabase secrets set SITE_URL=https://haniex.github.io/AF-STUDIO
@@ -63,7 +75,7 @@ supabase secrets set RESEND_API_KEY=... MAIL_FROM="AF Studio <studio@ваш-до
 
 ## 6. Email-уведомления о событиях
 **Database → Webhooks → Create**: таблица `public.notifications`, событие `INSERT`,
-тип «Supabase Edge Function» → `notify-email`, заголовок `x-webhook-secret: <WEBHOOK_SECRET>`.
+тип «Supabase Edge Function» → `notify`, заголовок `x-webhook-secret: <WEBHOOK_SECRET>`.
 Без `RESEND_API_KEY` функция ничего не отправляет (уведомления в платформе работают всегда).
 
 ## 7. Realtime

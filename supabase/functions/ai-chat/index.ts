@@ -17,11 +17,19 @@ const EPHEMERAL: Mode[] = ['builder_hint', 'moodboard'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req) => {
+  try { return await handle(req); }
+  catch (e) {
+    console.error('ai_chat_crash', String(e?.stack || e));
+    return json(req, { error: 'server_error', detail: String(e?.message || e).slice(0, 200) }, 500);
+  }
+});
+
+async function handle(req: Request): Promise<Response> {
   const pre = preflight(req);
   if (pre) return pre;
 
   const auth = await requireUser(req);
-  if (!auth) return json(req, { error: 'unauthorized' }, 401);
+  if (!auth) return json(req, { error: 'unauthorized', detail: 'user token rejected' }, 401);
   const uid = auth.user.id;
 
   const body = await readJson<Body>(req);
@@ -30,8 +38,18 @@ Deno.serve(async (req) => {
   const db = adminClient();
   const lang = body.lang === 'en' ? 'en' : 'ru';
 
-  const { data: settings } = await db.from('ai_settings').select('*').eq('id', 1).maybeSingle();
-  if (!settings?.enabled) return json(req, { error: 'ai_disabled' }, 503);
+  let { data: settings, error: sErr } = await db.from('ai_settings').select('*').eq('id', 1).maybeSingle();
+  if (sErr) {
+    // Usually: the service key available to the function is not accepted by the database
+    console.error('ai_settings_read_failed', sErr.code, sErr.message);
+    return json(req, { error: 'server_config', detail: `${sErr.code ?? ''} ${sErr.message ?? ''}`.trim().slice(0, 200) }, 500);
+  }
+  if (!settings) {
+    const ins = await db.from('ai_settings').insert({ id: 1 }).select('*').single();
+    if (ins.error) return json(req, { error: 'server_config', detail: ins.error.message?.slice(0, 200) }, 500);
+    settings = ins.data;
+  }
+  if (!settings.enabled) return json(req, { error: 'ai_disabled' }, 503);
 
   // ---------------------------------------------------------------- handoff
   if (body.action === 'handoff') {
@@ -71,7 +89,7 @@ Deno.serve(async (req) => {
   if ((perMinute ?? 0) >= settings.per_minute_limit) return json(req, { error: 'rate_limited', retry_after: 60 }, 429);
 
   const { data: used, error: qErr } = await db.rpc('ai_consume', { p_user: uid, p_daily_limit: settings.daily_limit });
-  if (qErr) return json(req, { error: 'server_error' }, 500);
+  if (qErr) { console.error('ai_consume_failed', qErr.message); return json(req, { error: 'server_config', detail: qErr.message?.slice(0, 200) }, 500); }
   if (used === null) return json(req, { error: 'daily_limit', limit: settings.daily_limit }, 429);
 
   // ---------------------------------------------------------------- conversation
@@ -89,7 +107,7 @@ Deno.serve(async (req) => {
     } else {
       const title = message.replace(/\s+/g, ' ').slice(0, 60);
       const { data: conv, error } = await db.from('ai_conversations').insert({ user_id: uid, title, mode }).select('id').single();
-      if (error || !conv) return json(req, { error: 'server_error' }, 500);
+      if (error || !conv) { console.error('conv_insert_failed', error?.message); return json(req, { error: 'server_error', detail: 'conversation: ' + (error?.message ?? '').slice(0, 180) }, 500); }
       conversationId = conv.id;
     }
   }
@@ -214,12 +232,13 @@ Deno.serve(async (req) => {
 
   // ---------------------------------------------------------------- persist
   if (conversationId) {
-    await db.from('ai_messages').insert([
+    const { error: mErr } = await db.from('ai_messages').insert([
       { conversation_id: conversationId, user_id: uid, role: 'user', content: message },
       { conversation_id: conversationId, user_id: uid, role: 'assistant', content: reply },
     ]);
+    if (mErr) console.error('messages_insert_failed', mErr.message);
     await db.from('ai_conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
   }
 
   return json(req, { conversation_id: conversationId, reply, usage: { today: used, limit: settings.daily_limit } });
-});
+}

@@ -140,8 +140,10 @@ export async function render(el, { params }) {
       const code = e.code || 'generic';
       messages.pop();
       $('[data-typing]', body)?.remove();
-      const key = ['ai_disabled', 'ai_not_configured', 'daily_limit', 'rate_limited', 'provider_busy', 'provider_error', 'provider_timeout', 'too_long', 'network'].includes(code) ? 'errors.' + code : 'errors.generic';
-      toast(t(key, { limit: e.details?.limit || '' }), 'err', 6000);
+      const key = ['ai_disabled', 'ai_not_configured', 'daily_limit', 'rate_limited', 'provider_busy', 'provider_error', 'provider_timeout', 'too_long', 'network', 'server_config'].includes(code) ? 'errors.' + code : 'errors.generic';
+      const tech = key === 'errors.generic' || key === 'errors.server_config' ? ` [${e.status || ''} ${code}${e.detail ? ': ' + e.detail : ''}]` : '';
+      toast(t(key, { limit: e.details?.limit || '' }) + tech, 'err', 12000);
+      console.warn('[AF AI]', e.status, code, e.detail);
       ta.value = q; paint();
     } finally { busy = false; $('.ai-send', form).disabled = false; ta.focus(); }
   }

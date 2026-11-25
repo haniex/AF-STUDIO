@@ -10,7 +10,8 @@ export const CONFIG = {
   // from the address the site is opened at, so it works under any repository name or domain.
   SITE_URL: '',
   FEATURES: {
-    googleOAuth: false,       // set true after enabling Google provider in Supabase Auth
+    // 'auto' = show the Google button only if the Google provider is enabled in Supabase Auth
+    googleOAuth: 'auto',
   },
   LIMITS: {
     uploadMB: 50,

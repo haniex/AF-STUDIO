@@ -3,7 +3,10 @@ import { html, icon, fmtRelative, projectNo, reveal, magnetic, emptyState, skele
 import { auth } from '../core/auth.js';
 import { supabase } from '../lib/supabase.js';
 import { listProjects, listThreads, getFavorites, getServices } from '../core/api.js';
-import { heroScene, countUp } from '../legacy/widgets.js';
+import { countUp } from '../legacy/widgets.js';
+import { mountShowcase } from '../three/showcase.js';
+import { MODELS } from '../three/models.js';
+import { getLang } from '../core/i18n.js';
 import { ABOUT } from '../data/about.js';
 import { locj } from '../core/i18n.js';
 
@@ -11,17 +14,22 @@ export async function render(el) {
   const name = (auth.profile?.full_name || '').split(' ')[0] || auth.user.email.split('@')[0];
   el.innerHTML = String(html`
     <section class="ov-hero" data-reveal>
-      <canvas aria-hidden="true"></canvas>
-      <span class="ov-hero__badge">${t('overview.heroKicker')}</span>
-      <h2>${t('overview.hello', { name })}<br /><em>${t('overview.sub')}</em></h2>
-      <p>${t('overview.heroSub')}</p>
-      <div class="af-row">
-        <a class="af-btn af-btn--gold magnetic" href="#/builder">${icon('builder')}<span>${t('overview.qBuilder')}</span></a>
-        <a class="af-btn af-btn--ghost magnetic" href="#/portfolio">${t('overview.qPortfolio')}</a>
+      <div class="ov-hero__text">
+        <span class="ov-hero__badge">${t('overview.heroKicker')}</span>
+        <h2>${t('overview.hello', { name })}<br /><em>${t('overview.sub')}</em></h2>
+        <p>${t('overview.heroSub')}</p>
+        <div class="af-row">
+          <a class="af-btn af-btn--gold magnetic" href="#/builder">${icon('builder')}<span>${t('overview.qBuilder')}</span></a>
+          <a class="af-btn af-btn--ghost magnetic" href="#/lab">${icon('lab')}<span>${t('nav.lab')}</span></a>
+        </div>
       </div>
+      <div class="ov-hero__stage"><span class="ov-hero__ring" aria-hidden="true"></span><canvas aria-label="3D"></canvas>
+        <div class="ov-hero__caption"><span data-model-name></span><span class="ov-hero__dots" data-dots></span></div></div>
     </section>
+    ${auth.isAdmin ? html`<section class="ov-admin" data-io><div><b>${t('overview.adminTitle')}</b><p class="af-muted" style="font-size:13px">${t('overview.adminText')}</p></div>
+      <a class="af-btn af-btn--primary af-btn--sm" href="admin.html">${icon('admin')}<span>${t('nav.admin')}</span></a></section>` : ''}
     <section class="ov-stats" data-stats>${skeleton(4, 'af-skel-row')}</section>
-    <section class="af-card ov-about" data-reveal style="margin-bottom:22px">
+    <section class="af-card ov-about" data-io style="margin-bottom:22px">
       <div class="about-grid">
         <div class="about-text"><span class="af-kicker">01 · ${t('nav.overview')}</span>
           <p class="about-lead">${locj(ABOUT.lead)}</p><p>${locj(ABOUT.text)}</p>
@@ -32,7 +40,7 @@ export async function render(el) {
       </div>
     </section>
     <section class="af-grid af-grid--2">
-      <div class="af-card" data-reveal>
+      <div class="af-card" data-io>
         <div class="af-card__head"><h3>${t('overview.quick')}</h3></div>
         <div class="ov-quick">
           <a href="#/builder">${icon('builder')}<span>${t('overview.qBuilder')}</span></a>
@@ -43,22 +51,33 @@ export async function render(el) {
           <a href="#/files">${icon('files')}<span>${t('nav.files')}</span></a>
         </div>
       </div>
-      <div class="af-card" data-reveal>
+      <div class="af-card" data-io>
         <div class="af-card__head"><h3>${t('overview.recentProjects')}</h3><a class="af-link" href="#/projects">${t('common.viewAll')}</a></div>
         <div class="ov-list" data-projects>${skeleton(3, 'af-skel-row')}</div>
       </div>
-      <div class="af-card" data-reveal>
+      <div class="af-card" data-io>
         <div class="af-card__head"><h3>${t('overview.recentMsgs')}</h3><a class="af-link" href="#/messages">${t('common.viewAll')}</a></div>
         <div class="ov-list" data-msgs>${skeleton(3, 'af-skel-row')}</div>
       </div>
-      <div class="af-card" data-reveal>
+      <div class="af-card" data-io>
         <div class="af-card__head"><h3>${t('notif.title')}</h3><a class="af-link" href="#/notifications">${t('common.viewAll')}</a></div>
         <div class="ov-list" data-notifs>${skeleton(3, 'af-skel-row')}</div>
       </div>
     </section>`);
   reveal(el); magnetic(el);
   countUp(el.querySelector('[data-about-stats]'));
-  const stopHero = await heroScene(el.querySelector('.ov-hero canvas'));
+  const SHOW = ['perfume', 'watch', 'car', 'headphones', 'sculpture', 'robot', 'crystal', 'pavilion'];
+  const dots = el.querySelector('[data-dots]');
+  dots.innerHTML = SHOW.map((id, i) => `<button type="button" data-i="${i}" aria-label="${i + 1}"></button>`).join('');
+  const show = await mountShowcase(el.querySelector('.ov-hero canvas'), {
+    ids: SHOW,
+    onChange: (i, id) => {
+      const nm = el.querySelector('[data-model-name]'); if (nm) nm.textContent = MODELS.find((m) => m.id === id)?.title[getLang()] || '';
+      dots.querySelectorAll('button').forEach((b, k) => b.classList.toggle('is-on', k === i));
+    },
+  });
+  dots.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => show.go(+b.dataset.i)));
+  const stopHero = () => show.dispose();
 
   try {
     const [projects, threads, favs, services, notifs, unread] = await Promise.all([

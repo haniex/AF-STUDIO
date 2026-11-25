@@ -5,6 +5,8 @@ import { auth, updateProfile, changePassword, changeEmail, signOut, authErrorKey
 import { applyTheme, getTheme } from '../core/theme.js';
 import { validateFile } from '../core/api.js';
 import { CONFIG } from '../config.js';
+import { prefs } from '../core/prefs.js';
+import { fmtDateTime } from '../core/ui.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -14,7 +16,7 @@ export async function render(el) {
   el.innerHTML = String(html`
     <header class="af-page-head" data-reveal><div><h2>${t('settings.title')}</h2></div></header>
     <div class="st">
-      <section class="af-card" data-reveal>
+      <section class="af-card" data-io>
         <h3 class="af-h3">${t('settings.profile')}</h3>
         <div class="st-avatar">
           <span class="af-avatar af-avatar--xl" data-av>${initials(p.full_name || auth.user.email)}</span>
@@ -28,7 +30,7 @@ export async function render(el) {
         </form>
       </section>
 
-      <section class="af-card" data-reveal>
+      <section class="af-card" data-io>
         <h3 class="af-h3">${t('settings.security')}</h3>
         ${oauth ? html`<p class="af-muted">${t('settings.oauthUser')}</p>` : html`
         <form data-pwd class="adm-form-grid">
@@ -39,7 +41,7 @@ export async function render(el) {
         </form>`}
       </section>
 
-      <section class="af-card" data-reveal>
+      <section class="af-card" data-io>
         <h3 class="af-h3">${t('settings.prefs')}</h3>
         <div class="af-switch"><span>${t('settings.language')}</span><div class="af-seg"><button type="button" data-lang="ru" class="${getLang() === 'ru' ? 'is-on' : ''}">RU</button><button type="button" data-lang="en" class="${getLang() === 'en' ? 'is-on' : ''}">EN</button></div></div>
         <div class="af-switch"><span>${t('settings.theme')}</span><div class="af-seg"><button type="button" data-theme="dark" class="${getTheme() === 'dark' ? 'is-on' : ''}">${t('settings.dark')}</button><button type="button" data-theme="light" class="${getTheme() === 'light' ? 'is-on' : ''}">${t('settings.light')}</button></div></div>
@@ -48,7 +50,29 @@ export async function render(el) {
         <label class="af-switch"><span>${t('settings.notifyEmail')}</span><input type="checkbox" data-pref="notify_email" ${p.notify_email !== false ? 'checked' : ''} /></label>
       </section>
 
-      <section class="af-card" data-reveal>
+      <section class="af-card" data-io>
+        <h3 class="af-h3">${t('settings.visual')}</h3>
+        <p class="af-muted" style="font-size:13px;margin-bottom:6px">${t('settings.visualHint')}</p>
+        <div class="af-switch"><span>${t('settings.animations')}</span><div class="af-seg" data-dev="fx"><button type="button" data-v="full" class="${prefs.fx === 'full' ? 'is-on' : ''}">${t('settings.animFull')}</button><button type="button" data-v="reduced" class="${prefs.fx === 'reduced' ? 'is-on' : ''}">${t('settings.animReduced')}</button></div></div>
+        <div class="af-switch"><span>${t('settings.quality3d')}</span><div class="af-seg" data-dev="q3d">${['high', 'medium', 'low'].map((v) => html`<button type="button" data-v="${v}" class="${prefs.q3d === v ? 'is-on' : ''}">${t('settings.q.' + v)}</button>`)}</div></div>
+        <label class="af-switch"><span>${t('settings.glow')}</span><input type="checkbox" data-glow ${prefs.glow ? 'checked' : ''} /></label>
+      </section>
+
+      <section class="af-card" data-io>
+        <h3 class="af-h3">${t('settings.account')}</h3>
+        <div class="st-meta">
+          <div><small>${t('settings.registered')}</small><b>${fmtDateTime(auth.user.created_at)}</b></div>
+          <div><small>${t('settings.lastLogin')}</small><b>${fmtDateTime(auth.user.last_sign_in_at)}</b></div>
+          <div><small>${t('settings.provider')}</small><b>${(auth.user.app_metadata?.providers || [auth.user.app_metadata?.provider]).filter(Boolean).join(', ') || 'email'}</b></div>
+          <div><small>${t('settings.emailStatus')}</small><b>${auth.user.email_confirmed_at ? t('settings.confirmed') : t('settings.notConfirmed')}</b></div>
+        </div>
+        <div class="af-row" style="margin-top:14px">
+          <button type="button" class="af-btn af-btn--ghost af-btn--sm" data-export>${icon('download')}<span>${t('settings.export')}</span></button>
+          ${auth.isAdmin ? html`<a class="af-btn af-btn--primary af-btn--sm" href="admin.html">${icon('admin')}<span>${t('nav.admin')}</span></a>` : ''}
+        </div>
+      </section>
+
+      <section class="af-card" data-io>
         <h3 class="af-h3">${t('settings.session')}</h3>
         <div class="af-row"><button type="button" class="af-btn af-btn--ghost" data-logout>${icon('logout')}<span>${t('settings.logout')}</span></button>
           <button type="button" class="af-btn af-btn--ghost" data-logout-all>${t('settings.logoutAll')}</button></div>
@@ -121,6 +145,25 @@ export async function render(el) {
   $$('[data-pref]', el).forEach((i) => i.addEventListener('change', async () => {
     try { await updateProfile({ [i.dataset.pref]: i.checked }); toast(t('common.saved'), 'ok', 1200); } catch { i.checked = !i.checked; toast(t('errors.generic'), 'err'); }
   }));
+  $$('[data-dev]', el).forEach((g) => $$('[data-v]', g).forEach((b) => b.addEventListener('click', () => {
+    prefs.set(g.dataset.dev, b.dataset.v); $$('[data-v]', g).forEach((x) => x.classList.toggle('is-on', x === b)); toast(t('common.saved'), 'ok', 1200);
+  })));
+  $('[data-glow]', el).addEventListener('change', (e) => { prefs.set('glow', e.target.checked ? '1' : '0'); });
+  $('[data-export]', el).addEventListener('click', async (e) => {
+    const b = e.currentTarget; setBusy(b, true);
+    try {
+      const uidv = auth.user.id; const q = (tb, col = 'user_id') => supabase.from(tb).select('*').eq(col, uidv).then((r) => r.data || []);
+      const threads = await q('threads', 'client_id');
+      const messages = threads.length ? (await supabase.from('messages').select('*').in('thread_id', threads.map((x) => x.id))).data || [] : [];
+      const convs = await q('ai_conversations');
+      const aiMsgs = convs.length ? (await supabase.from('ai_messages').select('*').in('conversation_id', convs.map((x) => x.id))).data || [] : [];
+      const data = { exported_at: new Date().toISOString(), profile: auth.profile, projects: await q('projects', 'client_id'), files: await q('files', 'owner_id'),
+        favorites: await q('favorites'), moodboards: await q('moodboards'), threads, messages, ai_conversations: convs, ai_messages: aiMsgs, notifications: await q('notifications') };
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+      a.download = `af-studio-my-data-${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    } catch (err) { console.error(err); toast(t('errors.generic'), 'err'); }
+    setBusy(b, false);
+  });
   $('[data-logout]', el).addEventListener('click', () => signOut());
   $('[data-logout-all]', el).addEventListener('click', () => signOut(true));
 

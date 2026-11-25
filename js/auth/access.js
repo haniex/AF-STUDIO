@@ -1,7 +1,8 @@
 // AF ACCESS — the only screen an unauthenticated visitor can ever see.
 import { t, getLang, setLang, onLang } from '../core/i18n.js';
-import { html, raw, $, $$, icon, modal, setBusy, reducedMotion, isMobile, loadThree, sleep } from '../core/ui.js';
+import { html, raw, $, $$, icon, modal, setBusy, reducedMotion , sleep } from '../core/ui.js';
 import { CONFIG, isConfigured } from '../config.js';
+import { mountAurum } from '../three/aurum.js';
 import {
   signIn, signUp, resendConfirmation, requestPasswordReset, completePasswordReset, signInWithGoogle, authErrorKey,
 } from '../core/auth.js';
@@ -9,17 +10,46 @@ import {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 let root = null; let scene3d = null; let offLang = null; let mode = 'login'; let pendingEmail = '';
 let resendTimer = null; let onEnterCb = () => {}; let flash = null;
+let googleOn = CONFIG.FEATURES.googleOAuth === true;
+let ui = null;
+let spaceToken = 0;
+let googleChecked = false;
+
+/** Ask Supabase Auth which providers are enabled (public endpoint, anon key). */
+async function detectGoogle() {
+  if (googleChecked || CONFIG.FEATURES.googleOAuth !== 'auto' || !isConfigured()) return;
+  googleChecked = true;
+  try {
+    const r = await fetch(CONFIG.SUPABASE_URL.replace(/\/$/, '') + '/auth/v1/settings', { headers: { apikey: CONFIG.SUPABASE_ANON_KEY } });
+    const j = await r.json();
+    if (j?.external?.google) {
+      googleOn = true;
+      const typed = root && Array.from(root.querySelectorAll('.acc-form input:not([type=checkbox]):not([type=hidden])')).some((i) => i.value);
+      if (!typed && (mode === 'login' || mode === 'register')) renderCard();
+    }
+  } catch (_) { /* provider list is optional */ }
+}
 
 export function mountAccess(el, { initialMode = 'login', message = null, onEnter } = {}) {
   root = el; onEnterCb = onEnter || onEnterCb;
   mode = !isConfigured() ? 'setup' : initialMode;
   flash = message;
   document.body.classList.add('af-access-on');
+  // Persistent full-screen space layer (survives language switches) + UI layer
+  root.innerHTML = `<div class="acc-space" aria-hidden="true"><canvas class="acc-canvas"></canvas><span class="acc-shade"></span><span class="acc-grain"></span><span class="acc-flash"></span></div><div class="acc-ui"></div>`;
+  ui = root.querySelector('.acc-ui');
+  const my = ++spaceToken;
+  mountAurum(root.querySelector('.acc-canvas')).then((sc) => {
+    if (my !== spaceToken) { sc?.dispose(); return; }
+    scene3d = sc; if (sc) root.querySelector('.acc-space').classList.add('is-live');
+  });
   renderShell();
   offLang = onLang(() => { renderShell(); });
+  detectGoogle();
 }
 
 export function unmountAccess() {
+  spaceToken++;
   scene3d?.dispose(); scene3d = null;
   offLang?.(); offLang = null;
   clearInterval(resendTimer);
@@ -28,10 +58,8 @@ export function unmountAccess() {
 }
 
 function renderShell() {
-  scene3d?.dispose(); scene3d = null;
-  root.innerHTML = String(html`
+  ui.innerHTML = String(html`
   <div class="acc" data-mode="${mode}">
-    <div class="acc-bg" aria-hidden="true"><span class="acc-beam acc-beam--1"></span><span class="acc-beam acc-beam--2"></span><span class="acc-grain"></span></div>
     <header class="acc-top">
       <a class="acc-logo" href="#" aria-label="AF STUDIO"><span class="acc-logo__mark">AF</span><span class="acc-logo__name">STUDIO</span></a>
       <div class="acc-lang" role="group" aria-label="Language">
@@ -41,7 +69,6 @@ function renderShell() {
     </header>
 
     <section class="acc-hero">
-      <canvas class="acc-canvas" aria-hidden="true"></canvas>
       <div class="acc-hero__content">
         <p class="acc-kicker"><span class="acc-dot"></span>${t('access.kicker')}</p>
         <h1 class="acc-title">
@@ -76,7 +103,6 @@ function renderShell() {
   $('.acc-logo', root).addEventListener('click', (e) => e.preventDefault());
   renderCard();
   introAnimation();
-  initScene($('.acc-canvas', root));
 }
 
 // ---------------------------------------------------------------------
@@ -193,7 +219,7 @@ function viewEntering() {
   return html`<div class="acc-enter"><div class="acc-enter__ring"><span>AF</span></div><p>${t('access.entering')}</p></div>`;
 }
 
-const googleBtn = () => (CONFIG.FEATURES.googleOAuth ? html`
+const googleBtn = () => (googleOn ? html`
   <div class="acc-or"><span>${t('common.or')}</span></div>
   <button type="button" class="acc-btn acc-btn--ghost" data-google>${raw(icon('google'))}<span>${t('access.google')}</span></button>` : '');
 
@@ -331,6 +357,7 @@ function bindResend(body) {
 
 async function enter() {
   mode = 'entering'; renderCard();
+  root?.querySelector('.acc-space')?.classList.add('is-warp');
   await scene3d?.warp();
   await sleep(reducedMotion() ? 50 : 350);
   onEnterCb();
@@ -350,108 +377,4 @@ function introAnimation() {
   g.fromTo($$('.acc-line', root), { yPercent: 110, opacity: 0 }, { yPercent: 0, opacity: 1, duration: 1.1, stagger: 0.12, ease: 'power4.out', delay: 0.1 });
   g.fromTo($$('.acc-kicker, .acc-lead, .acc-feats li', root), { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.8, stagger: 0.08, ease: 'power3.out', delay: 0.45 });
   g.fromTo($('.acc-card', root), { y: 26, opacity: 0, scale: 0.98 }, { y: 0, opacity: 1, scale: 1, duration: 1, ease: 'power3.out', delay: 0.25 });
-}
-
-// ---------------------------------------------------------------------
-// 3D composition: polished torus knot core, orbiting geometry, particle field
-// ---------------------------------------------------------------------
-async function initScene(canvas) {
-  if (!canvas) return;
-  let THREE;
-  try { THREE = await loadThree(); } catch { return; }
-  if (!canvas.isConnected) return;
-  const mobile = isMobile();
-  const reduced = reducedMotion();
-  let renderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: !mobile, powerPreference: 'high-performance' }); }
-  catch { return; }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1.5 : 2));
-  renderer.outputEncoding = THREE.sRGBEncoding;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
-  camera.position.set(0, 0, mobile ? 9 : 7.5);
-
-  // lights — warm key, cool rim
-  scene.add(new THREE.AmbientLight(0x2a2420, 1.2));
-  const key = new THREE.PointLight(0xf1c99a, 3.2, 30); key.position.set(4, 3, 5); scene.add(key);
-  const rim = new THREE.PointLight(0x8fb4ff, 1.6, 30); rim.position.set(-5, -2, -3); scene.add(rim);
-  const top = new THREE.DirectionalLight(0xffffff, 0.6); top.position.set(0, 6, 2); scene.add(top);
-
-  const group = new THREE.Group(); scene.add(group);
-  const core = new THREE.Mesh(
-    new THREE.TorusKnotGeometry(1.05, 0.34, mobile ? 140 : 260, mobile ? 18 : 32, 2, 3),
-    new THREE.MeshPhysicalMaterial({ color: 0x1a1612, metalness: 0.9, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.15, reflectivity: 1 }),
-  );
-  group.add(core);
-
-  const wireMat = new THREE.MeshBasicMaterial({ color: 0xd4a574, wireframe: true, transparent: true, opacity: 0.22 });
-  const orbiters = [
-    [new THREE.IcosahedronGeometry(0.42, 1), 2.6, 0.0, 0.9],
-    [new THREE.OctahedronGeometry(0.3, 0), 2.1, 2.1, 1.3],
-    [new THREE.TorusGeometry(0.26, 0.07, 12, 40), 2.9, 4.2, 0.7],
-  ].map(([geo, r, phase, speed]) => { const m = new THREE.Mesh(geo, wireMat.clone()); m.userData = { r, phase, speed }; group.add(m); return m; });
-
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(2.45, 0.006, 8, 160), new THREE.MeshBasicMaterial({ color: 0xd4a574, transparent: true, opacity: 0.35 }));
-  ring.rotation.x = Math.PI / 2.3; group.add(ring);
-
-  const count = mobile ? 380 : 900;
-  const pos = new Float32Array(count * 3);
-  for (let i = 0; i < count; i++) {
-    const r = 3 + Math.random() * 7; const th = Math.random() * Math.PI * 2; const ph = Math.acos(2 * Math.random() - 1);
-    pos[i * 3] = r * Math.sin(ph) * Math.cos(th); pos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th) * 0.6; pos[i * 3 + 2] = r * Math.cos(ph) - 2;
-  }
-  const pGeo = new THREE.BufferGeometry(); pGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const dust = new THREE.Points(pGeo, new THREE.PointsMaterial({ color: 0xe8d5b8, size: 0.025, transparent: true, opacity: 0.55, depthWrite: false }));
-  scene.add(dust);
-
-  let mx = 0, my = 0, tx = 0, ty = 0, raf = 0, warpT = 0, running = true;
-  const onMove = (e) => { tx = (e.clientX / innerWidth - 0.5) * 2; ty = (e.clientY / innerHeight - 0.5) * 2; };
-  window.addEventListener('pointermove', onMove, { passive: true });
-
-  const resize = () => {
-    const r = canvas.getBoundingClientRect();
-    if (!r.width || !r.height) return;
-    renderer.setSize(r.width, r.height, false);
-    camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
-    group.position.x = r.width > 700 ? 1.2 : 0;
-  };
-  const ro = new ResizeObserver(resize); ro.observe(canvas); resize();
-
-  const onVis = () => { running = !document.hidden; if (running) loop(); };
-  document.addEventListener('visibilitychange', onVis);
-
-  const clock = new THREE.Clock();
-  function loop() {
-    if (!running) return;
-    raf = requestAnimationFrame(loop);
-    const tm = clock.getElapsedTime();
-    const sp = reduced ? 0.15 : 1;
-    mx += (tx - mx) * 0.05; my += (ty - my) * 0.05;
-    core.rotation.x = tm * 0.18 * sp + my * 0.3; core.rotation.y = tm * 0.24 * sp + mx * 0.4;
-    orbiters.forEach((o, i) => {
-      const a = tm * 0.35 * o.userData.speed * sp + o.userData.phase;
-      o.position.set(Math.cos(a) * o.userData.r, Math.sin(a * 1.3) * 0.9, Math.sin(a) * o.userData.r * 0.6);
-      o.rotation.x += 0.004 * sp; o.rotation.y += 0.006 * sp;
-    });
-    ring.rotation.z = tm * 0.08 * sp;
-    dust.rotation.y = tm * 0.015 * sp + mx * 0.08;
-    group.rotation.y = mx * 0.25; group.rotation.x = -my * 0.15;
-    key.position.x = 4 + mx * 2;
-    if (warpT > 0) { camera.position.z -= 0.18 * warpT; warpT = Math.min(warpT + 0.08, 3); }
-    renderer.render(scene, camera);
-  }
-  loop();
-
-  scene3d = {
-    warp: () => new Promise((res) => { if (reduced) return res(); warpT = 0.1; setTimeout(res, 650); }),
-    dispose: () => {
-      running = false; cancelAnimationFrame(raf); ro.disconnect();
-      window.removeEventListener('pointermove', onMove); document.removeEventListener('visibilitychange', onVis);
-      scene.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
-      renderer.dispose();
-    },
-  };
 }

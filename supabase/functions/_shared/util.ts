@@ -29,7 +29,7 @@ export function preflight(req: Request): Response | null {
 }
 
 export function adminClient(): SupabaseClient {
-  return createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
+  return createClient(Deno.env.get('SUPABASE_URL')!, (Deno.env.get('AF_SERVICE_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SECRET_KEY'))!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
@@ -39,7 +39,7 @@ export async function requireUser(req: Request): Promise<{ user: User; token: st
   const auth = req.headers.get('Authorization') ?? '';
   const token = auth.startsWith('Bearer ') ? auth.slice(7) : '';
   if (!token) return null;
-  const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, {
+  const client = createClient(Deno.env.get('SUPABASE_URL')!, (Deno.env.get('AF_PUBLIC_KEY') || Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('SUPABASE_PUBLISHABLE_KEY'))!, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   const { data, error } = await client.auth.getUser(token);
