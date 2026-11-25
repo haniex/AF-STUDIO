@@ -53,7 +53,6 @@ body.af-app-on::before {
 body.af-app-on::after {
   content: ''; position: fixed; inset: -50%; z-index: -1; pointer-events: none; opacity: 0.5;
   background: conic-gradient(from 0deg at 50% 50%, transparent 0 25%, rgba(212, 165, 116, 0.05) 30%, transparent 40% 70%, rgba(140, 120, 255, 0.04) 78%, transparent 85%);
-  animation: afAurora 38s linear infinite;
 }
 body.af-app-on.light::after { opacity: 0.8; }
 @keyframes afAurora { to { transform: rotate(360deg); } }
@@ -71,7 +70,7 @@ body.af-app-on.light::after { opacity: 0.8; }
   border: 1px solid var(--af-line);
   box-shadow: var(--af-shadow);
 }
-.af-card { position: relative; isolation: isolate; overflow: hidden; }
+.af-card { position: relative; isolation: isolate; }
 .af-card--danger { border-color: color-mix(in srgb, var(--af-err) 40%, transparent); }
 .ai-side, .lab-panel .af-card, .af-pop, .af-modal__panel { background: var(--af-surface-2); }
 .af-side { background: color-mix(in srgb, var(--bg-elevated) 86%, transparent); backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%); border-right: 1px solid var(--af-line); }
@@ -87,7 +86,8 @@ body.af-scrolled .af-top { box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.6); }
 }
 .af-card:hover::before, .work-card:hover::before, .ov-quick a:hover::before, .bd-svc:hover::before, .calc-cat:hover::before, .lab-tile:hover::before, .pr-card:hover::before, .adm-kpi:hover::before, .service-card:hover::before, .sv-contacts a:hover::before { opacity: 1; }
 body.light .af-card::before, body.light .work-card::before { background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 0%), rgba(184, 134, 78, 0.12), transparent 45%); }
-.ov-quick a, .bd-svc, .calc-cat, .lab-tile, .pr-card, .adm-kpi, .service-card, .sv-contacts a { position: relative; overflow: hidden; }
+.ov-quick a, .bd-svc, .calc-cat, .lab-tile, .adm-kpi, .service-card, .sv-contacts a { position: relative; }
+.pr-card { position: relative; overflow: hidden; }
 .af-card > *, .ov-quick a > *, .bd-svc > *, .calc-cat > *, .lab-tile > *, .pr-card > *, .adm-kpi > * { position: relative; z-index: 1; }
 
 /* gradient border on hover */
@@ -119,7 +119,7 @@ body.light .af-card::before, body.light .work-card::before { background: radial-
 /* ---------------------------------------------------------------- buttons */
 .af-btn { position: relative; overflow: hidden; isolation: isolate; }
 .af-btn--primary { background: var(--text); color: var(--bg); box-shadow: 0 10px 26px -14px rgba(0, 0, 0, 0.6); }
-.af-btn--gold { background: var(--af-gold-grad); background-size: 200% 100%; box-shadow: 0 12px 30px -14px color-mix(in srgb, var(--af-gold) 90%, transparent); animation: afGoldShift 6s ease-in-out infinite; }
+.af-btn--gold { background: var(--af-gold-grad); box-shadow: 0 12px 30px -14px color-mix(in srgb, var(--af-gold) 90%, transparent); }
 @keyframes afGoldShift { 50% { background-position: 100% 0; } }
 .af-btn--ghost { background: color-mix(in srgb, var(--bg-elevated) 55%, transparent); border-color: color-mix(in srgb, var(--text) 16%, transparent); }
 .af-btn--ghost:hover { border-color: color-mix(in srgb, var(--af-gold) 60%, transparent); color: var(--text); }
@@ -142,7 +142,7 @@ body.light .af-card::before, body.light .work-card::before { background: radial-
 
 /* ---------------------------------------------------------------- page transitions & reveal */
 .af-view__inner { animation: afPageIn 0.55s var(--af-ease) both; }
-@keyframes afPageIn { from { opacity: 0; transform: translateY(14px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes afPageIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 [data-io] { opacity: 0; transform: translateY(22px) scale(0.985); transition: opacity 0.7s var(--af-ease) var(--io-delay, 0ms), transform 0.8s var(--af-ease) var(--io-delay, 0ms); }
 [data-io].is-in { opacity: 1; transform: none; }
 
@@ -170,21 +170,26 @@ body:not(.af-app-on) .af-aura, body.fx-noglow .af-aura { display: none; }
 .af-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 50; transform-origin: 0 50%; transform: scaleX(0); background: var(--af-gold-grad); box-shadow: 0 0 12px var(--af-gold); pointer-events: none; }
 body:not(.af-app-on) .af-progress { display: none; }
 
-/* ---------------------------------------------------------------- overview hero with 3D showcase */
-.ov-hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: center; gap: 10px; min-height: 420px; padding-right: 0; background:
-  radial-gradient(ellipse 60% 90% at 78% 40%, color-mix(in srgb, var(--af-gold) 24%, transparent) 0%, transparent 60%), var(--af-surface); box-shadow: var(--af-shadow); }
-.ov-hero__text { position: relative; z-index: 2; }
-.ov-hero__stage { position: relative; height: 100%; min-height: 380px; }
-.ov-hero__stage canvas { position: absolute !important; inset: 0; width: 100%; height: 100%; z-index: 1; cursor: grab; }
-.ov-hero__stage canvas:active { cursor: grabbing; }
-.ov-hero__ring { position: absolute; left: 50%; top: 52%; width: min(78%, 420px); aspect-ratio: 1; transform: translate(-50%, -50%); border-radius: 50%; border: 1px solid color-mix(in srgb, var(--af-gold) 30%, transparent); box-shadow: 0 0 80px -10px color-mix(in srgb, var(--af-gold) 40%, transparent) inset; animation: afFloat 8s ease-in-out infinite; }
-.ov-hero__ring::after { content: ''; position: absolute; inset: 12%; border-radius: 50%; border: 1px dashed color-mix(in srgb, var(--af-gold) 22%, transparent); animation: afAurora 60s linear infinite; }
-.ov-hero__caption { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 2; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 999px; background: color-mix(in srgb, var(--bg-elevated) 70%, transparent); border: 1px solid var(--af-line); backdrop-filter: blur(10px); white-space: nowrap; font-size: 12.5px; font-weight: 600; }
-.ov-hero__dots { display: flex; gap: 5px; }
-.ov-hero__dots button { width: 7px; height: 7px; border-radius: 4px; background: color-mix(in srgb, var(--text) 25%, transparent); transition: width 0.35s var(--af-ease), background 0.35s; }
-.ov-hero__dots button.is-on { width: 20px; background: var(--af-gold); }
-.ov-hero h2 { animation: afTitleIn 1s var(--af-ease) both; }
-@keyframes afTitleIn { from { opacity: 0; transform: translateY(24px); letter-spacing: -0.06em; } }
+/* ---------------------------------------------------------------- overview hero: liquid-metal scene as full background */
+.af-view .ov-hero { overflow: hidden; display: flex; align-items: center; min-height: clamp(360px, 42vw, 520px); padding: clamp(26px, 4vw, 56px);
+  background: radial-gradient(60% 90% at 78% 50%, rgba(212, 165, 116, 0.22), transparent 65%), #050505; border-color: rgba(255, 236, 214, 0.12); box-shadow: var(--af-shadow); color: #f6f2ec; }
+.ov-hero__canvas { position: absolute !important; inset: 0; width: 100% !important; height: 100% !important; z-index: 0 !important; opacity: 0; transition: opacity 1.4s ease; cursor: pointer; }
+.ov-hero.is-live .ov-hero__canvas { opacity: 1; }
+.ov-hero::after { content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(90deg, rgba(5, 5, 5, 0.86) 0%, rgba(5, 5, 5, 0.55) 34%, rgba(5, 5, 5, 0) 62%); }
+.ov-hero__text { position: relative; z-index: 2; max-width: min(560px, 100%); pointer-events: none; }
+.ov-hero__text a, .ov-hero__text button { pointer-events: auto; }
+.ov-hero__badge { background: rgba(20, 15, 10, 0.7) !important; color: #e8c4a0 !important; border: 1px solid rgba(212, 165, 116, 0.35) !important; backdrop-filter: blur(8px); }
+.ov-hero h2 { font-size: clamp(30px, 4.2vw, 56px) !important; line-height: 1.04 !important; color: #f6f2ec; text-shadow: 0 6px 40px rgba(0, 0, 0, 0.6); animation: afTitleIn 1s var(--af-ease) both; }
+.ov-hero p { color: #cfc6bc !important; }
+.ov-hero .af-btn--ghost { color: #f6f2ec; background: rgba(10, 9, 8, 0.55); border-color: rgba(255, 236, 214, 0.22); backdrop-filter: blur(8px); }
+.ov-hero__hint { position: absolute; right: 18px; bottom: 14px; z-index: 2; font-size: 11.5px; letter-spacing: 0.04em; color: rgba(246, 242, 236, 0.55); pointer-events: none; }
+@keyframes afTitleIn { from { opacity: 0; transform: translateY(24px); } }
+@media (max-width: 900px) {
+  .af-view .ov-hero { align-items: flex-start; min-height: 560px; }
+  .ov-hero::after { background: linear-gradient(180deg, rgba(5, 5, 5, 0.88) 0%, rgba(5, 5, 5, 0.5) 46%, rgba(5, 5, 5, 0) 70%); }
+  .ov-hero__hint { left: 0; right: 0; text-align: center; }
+}
 .ov-admin { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding: 16px 20px; margin-bottom: 18px; border-radius: var(--af-r); border: 1px dashed color-mix(in srgb, var(--af-gold) 50%, transparent); background: color-mix(in srgb, var(--af-gold) 8%, transparent); }
 @media (max-width: 900px) {
   .ov-hero { grid-template-columns: 1fr; padding-right: clamp(26px, 4vw, 52px); }
@@ -192,24 +197,37 @@ body:not(.af-app-on) .af-progress { display: none; }
 }
 
 /* ---------------------------------------------------------------- 3D Lab */
-.lab-stage { transition: background 0.6s; box-shadow: var(--af-shadow); }
-.lab-stage--dark { background: radial-gradient(ellipse 80% 70% at 50% 30%, #2c251f 0%, #0b0a09 75%); }
-.lab-stage--warm { background: radial-gradient(ellipse 80% 70% at 50% 25%, #5a3d25 0%, #1b120b 80%); }
-.lab-stage--light { background: radial-gradient(ellipse 80% 70% at 50% 30%, #ffffff 0%, #ddd4c7 85%); }
-.lab-stage--grid { background: radial-gradient(ellipse 80% 70% at 50% 30%, #1e2430 0%, #07080b 80%); }
-.lab-stage--light .lab-hud__hint { color: #1c1917; background: rgba(255, 255, 255, 0.7); }
-.lab-stage--light .lab-hud__btns button { background: rgba(255, 255, 255, 0.75); color: #1c1917; border-color: rgba(0, 0, 0, 0.08); }
-.lab-loading { gap: 10px; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+.lab { align-items: start; }
+.af-view .lab-stage { overflow: hidden; position: sticky; top: calc(var(--af-top-h) + 14px); box-shadow: var(--af-shadow); background: #0c0a09; }
+.lab-canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+.lab-stage--light .lab-hud__hint, .lab-stage--light .lab-credit { color: #1c1917; background: rgba(255, 255, 255, 0.72); }
+.lab-stage--light .lab-hud__btns button { background: rgba(255, 255, 255, 0.8); color: #1c1917; border-color: rgba(0, 0, 0, 0.08); }
+.lab-loading { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; color: #f6f2ec; font-size: 13px; background: rgba(8, 7, 6, 0.45); backdrop-filter: blur(3px); }
 .lab-loading[hidden] { display: none !important; }
-.lab-gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
-.lab-tile { text-align: left; padding: 12px; border-radius: 14px; display: grid; gap: 3px; min-height: 64px; }
-.lab-tile b { font-size: 13px; font-weight: 600; line-height: 1.25; }
-.lab-tile__cat { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--af-gold); }
-.lab-tile.is-on { border-color: transparent; box-shadow: 0 0 0 2px var(--af-gold), var(--af-shadow-hover); }
+.lab-loading__ring { width: 74px; height: 74px; border-radius: 50%; display: grid; place-items: center; position: relative; font: 600 13px var(--font-main); }
+.lab-loading__ring::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(212, 165, 116, 0.2); border-top-color: #d4a574; animation: afSpin 0.9s linear infinite; }
+.lab-credit { position: absolute; left: 14px; top: 52px; z-index: 2; max-width: 70%; font-size: 11px; color: rgba(246, 242, 236, 0.7); padding: 5px 10px; border-radius: 999px; background: rgba(8, 7, 6, 0.45); backdrop-filter: blur(6px); pointer-events: none; }
+.lab-credit:empty { display: none; }
+.lab-badge { z-index: 2; }
+.lab-hud { z-index: 2; }
 .lab-hud__btns button { transition: transform 0.2s var(--af-ease), background 0.2s; }
-.lab-hud__btns button:hover { transform: translateY(-2px); background: rgba(212, 165, 116, 0.5); }
-.lab-panel { max-height: calc(100dvh - var(--af-top-h) - 60px); overflow-y: auto; scrollbar-width: thin; }
-@media (max-width: 1000px) { .lab-panel { max-height: none; } .lab-gallery { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
+.lab-hud__btns button:hover { transform: translateY(-2px); background: rgba(212, 165, 116, 0.55); }
+.lab-panel { display: flex !important; flex-direction: column; gap: 14px; max-height: none !important; overflow: visible !important; min-width: 0; }
+.lab-panel > .af-card { flex: none; }
+.lab-cats { margin-bottom: 12px; }
+.lab-cats .af-chip { height: 30px; padding: 0 11px; font-size: 12px; }
+.lab-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.lab-tile { text-align: left; padding: 11px 12px; border-radius: 14px; display: grid; gap: 2px; align-content: start; min-height: 66px; }
+.lab-tile b { font-size: 13px; font-weight: 600; line-height: 1.25; }
+.lab-tile small { font-size: 10.5px; color: var(--af-muted); }
+.lab-tile__cat { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--af-gold); }
+.lab-tile.is-on { border-color: transparent; box-shadow: 0 0 0 2px var(--af-gold), var(--af-shadow-hover); }
+.lab-tile.is-failed { opacity: 0.45; }
+.lab-tile.is-failed small::after { content: ' · ⚠'; }
+@media (max-width: 1000px) {
+  .af-view .lab-stage { position: relative; top: 0; min-height: 0; aspect-ratio: 4 / 3.4; }
+  .lab-gallery { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
 
 /* ---------------------------------------------------------------- misc polish */
 .af-stat b { background: var(--af-gold-grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
@@ -290,3 +308,19 @@ body.af-app-on.light .af-field input:-webkit-autofill { -webkit-text-fill-color:
 }
 @media (prefers-reduced-motion: reduce) { .acc-card::after { animation: none; } }
 body.fx-reduced .acc-card::after { animation: none; }
+
+
+/* =====================================================================
+   2.1.1 — layout fixes
+   ===================================================================== */
+/* The original styles.css clips every <section> (overflow: hidden) — that cut sticky
+   sidebars, cards and buttons inside the platform. Restore normal flow here… */
+.af-view section { overflow: visible; }
+/* …and keep clipping only where it is intended */
+.af-view .process, .af-view .reviews, .af-view .ba, .af-view .pd-main, .af-view .mb-viewport, .af-view .rv-stage, .af-view .ai-main { overflow: hidden; }
+.af-view .pd-side { position: sticky; top: calc(var(--af-top-h) + 20px); }
+/* AF AI: the sidebar is always visible on desktop → the history toggle is only for phones */
+@media (min-width: 861px) { [data-list-toggle] { display: none !important; } }
+/* long words / URLs never push layouts sideways */
+.af-view { overflow-wrap: break-word; }
+.af-view :is(h1, h2, h3) { overflow-wrap: break-word; }
