@@ -210,7 +210,6 @@ function watch(T, q) {
   }
   outer.castShadow = center.castShadow = true;
   g.add(outer, center);
-  // r134 Box3 ignores InstancedMesh instances → invisible bounds proxy so fitting/floor include the bracelet
   const bounds = new T.Mesh(new T.BoxGeometry(1.2, 2 * R + 0.2, R + 1.75), new T.MeshBasicMaterial({ visible: false }));
   bounds.position.set(0, 0, cz + (R + 1.75) / 2 - R - 0.12); bounds.userData.bounds = true; bounds.castShadow = false; bounds.visible = false;
   g.add(bounds);

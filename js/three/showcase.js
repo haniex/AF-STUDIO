@@ -29,13 +29,23 @@ export async function mountShowcase(canvas, { ids, interval = 6500, onChange } =
 
   const list = ids?.length ? ids : ['perfume', 'watch', 'car', 'headphones', 'sculpture', 'robot'];
   let index = -1; let current = null; let next = null; let tStart = 0; let timer = 0;
+  const cache = new Map(); // id → fitted model (built once, reused → no rebuild lag on switching)
+  const getModel = (id) => {
+    if (!cache.has(id)) { const o = fitObject(THREE, buildModel(THREE, id, q), 2.5, -1); o.userData.baseScale = o.scale.x; cache.set(id, o); }
+    return cache.get(id);
+  };
   let dragging = false; let lx = 0; let rotY = 0; let velY = 0; let mx = 0; let my = 0; let tx = 0; let ty = 0;
 
   function go(i) {
-    index = (i + list.length) % list.length;
+    const target = (i + list.length) % list.length;
+    if (target === index && !next) return;
+    // a switch during a running transition: finish it instantly instead of leaving a model behind
+    if (next) { if (current && current !== next) holder.remove(current); current = next; current.scale.setScalar(current.userData.baseScale); next = null; }
+    index = target;
     let obj;
-    try { obj = fitObject(THREE, buildModel(THREE, list[index], q), 2.5, -1); } catch (e) { console.warn('model', list[index], e); return; }
-    next = obj; next.scale.multiplyScalar(0.001); next.userData.targetScale = obj.scale.x * 1000;
+    try { obj = getModel(list[index]); } catch (e) { console.warn('model', list[index], e); return; }
+    if (obj === current) { onChange?.(index, list[index]); return; }
+    next = obj; next.userData.targetScale = obj.userData.baseScale; next.scale.setScalar(obj.userData.baseScale * 0.001);
     holder.add(next); tStart = performance.now();
     onChange?.(index, list[index]);
     clearTimeout(timer); if (!reducedMotion()) timer = setTimeout(() => go(index + 1), interval);
@@ -61,7 +71,7 @@ export async function mountShowcase(canvas, { ids, interval = 6500, onChange } =
       const k = Math.min(1, (performance.now() - tStart) / (reducedMotion() ? 1 : 900)); const e = 1 - Math.pow(1 - k, 3);
       next.scale.setScalar(next.userData.targetScale * (0.001 + e * 0.999));
       if (current) current.scale.multiplyScalar(0.86);
-      if (k >= 1) { if (current) { holder.remove(current); disposeObject(current); } current = next; next = null; }
+      if (k >= 1) { if (current) { holder.remove(current); current.scale.setScalar(current.userData.baseScale); } current = next; next = null; }
     }
     if (!dragging) { velY *= 0.94; rotY += velY + 0.004 * speed; }
     holder.rotation.y = rotY;
@@ -77,7 +87,7 @@ export async function mountShowcase(canvas, { ids, interval = 6500, onChange } =
     dispose() {
       alive = false; cancelAnimationFrame(raf); clearTimeout(timer); ro.disconnect();
       canvas.removeEventListener('pointerdown', down); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up);
-      [current, next].forEach((o) => o && disposeObject(o));
+      cache.forEach((o) => disposeObject(o)); cache.clear();
       scene.environment?.dispose?.(); renderer.dispose(); renderer.forceContextLoss?.();
     },
   };
