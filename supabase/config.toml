@@ -1,0 +1,10 @@
+# Supabase CLI config (partial). `supabase init` will merge the rest.
+[functions.ai-chat]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+# Called by a Database Webhook; authenticated with the x-webhook-secret header instead of a user JWT.
+[functions.notify-email]
+verify_jwt = false

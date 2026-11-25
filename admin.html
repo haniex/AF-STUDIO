@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>AF Admin — AF STUDIO</title>
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#0a0908" />
+  <meta name="referrer" content="strict-origin-when-cross-origin" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.supabase.co https://images.unsplash.com; media-src 'self' blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net; object-src 'none'; base-uri 'self'; form-action 'self'; frame-src 'none'" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="css/platform.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
+  <script src="js/boot-watchdog.js" defer></script>
+  <script type="module" src="js/admin/main.js"></script>
+</head>
+<body class="dark af-booting">
+  <div id="af-boot" class="af-boot" role="status" aria-live="polite">
+    <div class="af-boot__core">
+      <div class="af-boot__ring" aria-hidden="true"><span></span><span></span></div>
+      <div class="af-boot__logo">AF</div>
+      <p class="af-boot__text">AF ADMIN</p>
+      <p class="af-boot__secure"><span></span><b>Проверка прав администратора…</b></p>
+    </div>
+  </div>
+  <div id="af-app" hidden></div>
+</body>
+</html>

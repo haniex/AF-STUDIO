@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="robots" content="noindex" />
+  <title>AF STUDIO</title>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iOpvaMd0JBdOtEarzJT0pYUp0jucr0BmmYd/DkELO/M='" />
+  <!-- GitHub Pages serves this file for any unknown path (/studio, /projects …).
+       Everything is sent to index.html, where the central auth guard decides what to show.
+       The repository name is detected automatically. -->
+  <script>(function () {
+  var seg = location.pathname.split('/').filter(Boolean);
+  var onGithubProjectPage = /\.github\.io$/.test(location.hostname) && seg.length > 0;
+  var base = onGithubProjectPage ? '/' + seg.shift() + '/' : '/';
+  var first = (seg[0] || '').replace(/[^\w-]/g, '');
+  if (first === 'admin') { location.replace(base + 'admin.html'); return; }
+  var map = { '': 'overview', studio: 'overview' };
+  var rest = seg.join('/').replace(/[^\w\-/]/g, '');
+  location.replace(base + 'index.html#/' + (map[first] !== undefined ? map[first] : rest));
+})();</script>
+</head>
+<body style="background:#0a0908"></body>
+</html>
