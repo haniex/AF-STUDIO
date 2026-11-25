@@ -33,32 +33,22 @@ SQL Editor → вставить `supabase/migrations/20261125000006_owner_notifi
 - Или в платформе: пункт **AF Admin** внизу левого меню, в меню аватара (справа вверх), плашка на главной, кнопка в Настройках.
 - Видно только аккаунтам с ролью admin (`make-admin.sql`). Остальным — «Доступ запрещён».
 
-## 4. Telegram-уведомления (≈5 минут)
-1. В Telegram откройте **@BotFather** → `/newbot` → имя `AF Studio Notify` → username, например `af_studio_notify_bot`. Скопируйте **токен** (`123456:ABC…`). Никому его не присылайте.
-2. Откройте своего нового бота и нажмите **Start** (иначе бот не сможет вам писать).
-3. Узнайте свой chat id: напишите **@userinfobot** → он ответит числом `Id: 123456789`.
-4. Supabase → **Edge Functions → Secrets**:
-   | Name | Value |
-   |---|---|
-   | `TELEGRAM_BOT_TOKEN` | токен от BotFather |
-   | `TELEGRAM_CHAT_ID` | ваш id |
-   | `WEBHOOK_SECRET` | любая длинная случайная строка, например 40 символов |
-   | `SITE_URL` | `https://haniex.github.io/AF-STUDIO` |
-5. **Edge Functions → Deploy a new function → Via Editor**, имя `notify`, код — `supabase/dashboard/notify.ts` → Deploy → **отключить Verify JWT**.
-6. **Database → Webhooks → Create a new hook**:
-   - Name: `af_notify`; Table: `notifications`; Events: **Insert**
-   - Type: **Supabase Edge Functions** → `notify`, Method POST, Timeout 5000
-   - HTTP Headers → Add: `x-webhook-secret` = та же строка, что в `WEBHOOK_SECRET`
-7. Проверка: зарегистрируйте тестовый аккаунт в приватном окне — придёт «👤 Новый пользователь».
-
-Что будет приходить: новая заявка (с услугой, бюджетом, контактами клиента), новое сообщение клиента (с текстом), передача диалога из AF AI, комментарий к рендеру, решение клиента по рендеру, новый пользователь. Под каждым — кнопка «Открыть в AF Admin».
-Клиентам в Telegram ничего не уходит — только вам.
+## 4. Telegram-уведомления (проверено, работает)
+1. **@BotFather** → `/newbot` → получить токен. Открыть своего бота и нажать **Start**.
+2. **@userinfobot** → написать ему от себя (не пересылать!) → ваш личный id.
+   Не используйте число из начала токена — это id бота, Telegram ответит «bot can't send messages to the bot».
+3. Edge Functions → Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (ваш личный id), `SITE_URL`.
+4. Edge Functions → функция `notify` → код из `supabase/dashboard/notify.ts` → Deploy → **Verify JWT выключен**.
+5. SQL Editor → `supabase/migrations/20261125000008_notify_auto.sql` целиком, без изменений.
+   Раздел «Database → Webhooks» не нужен: отправку делает триггер в базе, секрет создаётся автоматически.
+6. Роль администратора — `supabase/make-admin.sql` (с вашим email входа). Telegram получают только админы.
+Проверка: `supabase/test-notify.sql`, диагностика: `supabase/check-notify.sql` (колонка `response` показывает причину).
 
 ## 5. Email-уведомления клиентам (по желанию)
 1. [resend.com](https://resend.com) → регистрация → **Domains** → добавить свой домен и DNS-записи (без своего домена письма можно слать только себе).
 2. **API Keys** → создать ключ.
 3. Secrets: `RESEND_API_KEY` = ключ, `MAIL_FROM` = `AF Studio <studio@ваш-домен>`.
-Используется тот же вебхук из шага 4 — ничего больше настраивать не нужно.
+Используется тот же триггер из шага 4 — ничего больше настраивать не нужно.
 
 ## 6. Вход через Google (≈10 минут)
 1. [console.cloud.google.com](https://console.cloud.google.com) → создать проект `AF STUDIO`.
@@ -88,3 +78,12 @@ SQL Editor → вставить `supabase/migrations/20261125000006_owner_notifi
 **Лицензии демо-моделей:** CC0 и CC BY 4.0, автор и лицензия показываются под сценой и в описании. Это не работы студии —
 так и подписано («демо-модель»). Модели грузятся с jsDelivr (запасной источник — raw.githubusercontent.com), 2–20 МБ каждая.
 Свои модели: AF Admin → 3D-модели — они появятся первыми.
+
+
+## 2.2 — AF COMMAND CENTER (Overview)
+Изменены только: `js/views/overview.js`, `css/platform-v2.css` (стили `.cc-*` вместо старого блока героя Overview),
+`js/core/i18n.js` (раздел `cc`, RU/EN). Восстановлены из 2.1: `js/three/models.js`, `js/three/showcase.js`.
+В `showcase.js` минимальное исправление: кэш готовых моделей (без пересборки при каждом переключении) и
+корректная обработка переключения во время анимации (раньше прежняя модель «застревала» в сцене).
+Остальные страницы, меню, авторизация, роутер, SQL и функции не менялись.
+Загрузить на GitHub: эти 5 файлов (`js/three/models.js` и `js/three/showcase.js` — заново, если удаляли).

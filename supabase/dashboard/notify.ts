@@ -1,4 +1,4 @@
-// AF STUDIO — Edge Function «notify» (single-file version for the Supabase dashboard editor).
+// AF STUDIO — Edge Function «notify» v3 (single-file version for the Supabase dashboard editor).
 // Paste the whole file into Edge Functions → notify → Code → index.ts and press Deploy. Turn OFF «Verify JWT».
 import { createClient, type SupabaseClient, type User } from 'jsr:@supabase/supabase-js@2';
 
@@ -66,7 +66,7 @@ export async function readJson<T>(req: Request, maxBytes = 64_000): Promise<T | 
 //   • by email via Resend (to any user who has email notifications enabled)
 // Triggered by a Supabase Database Webhook (table notifications, INSERT)
 // with the header  x-webhook-secret: <WEBHOOK_SECRET>.
-// Secrets: WEBHOOK_SECRET (required), TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (Telegram),
+// Secrets: WEBHOOK_SECRET (optional, legacy), TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID (Telegram),
 //          RESEND_API_KEY + MAIL_FROM (email), SITE_URL (links). Missing ones are skipped.
 
 const TITLE: Record<string, { ru: string; en: string; icon: string }> = {
@@ -90,13 +90,22 @@ const ok = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
 Deno.serve(async (req) => {
   try {
     if (req.method !== 'POST') return ok({ error: 'method_not_allowed' }, 405);
-    const secret = Deno.env.get('WEBHOOK_SECRET');
-    if (!secret || req.headers.get('x-webhook-secret') !== secret) return ok({ error: 'forbidden' }, 403);
+    // Auth: header must match the secret stored in the database (public.af_internal, readable only
+    // with the service key) or, optionally, the WEBHOOK_SECRET env secret.
+    const db = adminClient();
+    const header = (req.headers.get('x-webhook-secret') ?? '').trim();
+    const envSecret = (Deno.env.get('WEBHOOK' + '_SECRET') ?? '').trim();
+    let authorised = !!header && !!envSecret && header === envSecret;
+    if (!authorised && header) {
+      const { data: cfg, error: cErr } = await db.from('af_internal').select('webhook_secret').eq('id', 1).maybeSingle();
+      if (cErr) return ok({ error: 'forbidden', reason: 'cannot read af_internal: ' + cErr.message }, 403);
+      authorised = !!cfg?.webhook_secret && cfg.webhook_secret === header;
+    }
+    if (!authorised) return ok({ error: 'forbidden', reason: header ? 'x-webhook-secret does not match' : 'missing x-webhook-secret header' }, 403);
     const evt = await req.json().catch(() => null);
     const n = evt?.record;
     if (!n?.user_id || !n?.type) return ok({ error: 'bad_request' }, 400);
 
-    const db = adminClient();
     const site = (Deno.env.get('SITE_URL') ?? '').replace(/\/$/, '');
     const rel = String(n.link ?? '');
     const link = site ? (rel.startsWith('admin.html') ? `${site}/${rel}` : `${site}/index.html${rel}`) : '';
@@ -108,7 +117,9 @@ Deno.serve(async (req) => {
     const out: Record<string, unknown> = {};
 
     // ------------------------------------------------------------ Telegram (owner only)
-    const tgToken = Deno.env.get('TELEGRAM_BOT_TOKEN'); const tgChat = Deno.env.get('TELEGRAM_CHAT_ID');
+    const tgToken = (Deno.env.get('TELEGRAM_BOT_TOKEN') ?? '').trim(); const tgChat = (Deno.env.get('TELEGRAM_CHAT_ID') ?? '').trim();
+    if (!tgToken || !tgChat) out.telegram = { skipped: 'secrets TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set' };
+    else if (!role) out.telegram = { skipped: 'recipient is not an admin (Telegram goes only to admins)' };
     if (role && tgToken && tgChat) {
       const lines: string[] = [];
       const ttl = TITLE[n.type] ?? { ru: 'Уведомление', icon: '🔔' };
@@ -133,12 +144,25 @@ Deno.serve(async (req) => {
       if (p.preview) lines.push(`<blockquote>${esc(String(p.preview).slice(0, 600))}</blockquote>`);
       const body: Record<string, unknown> = { chat_id: tgChat, text: lines.join('\n'), parse_mode: 'HTML', disable_web_page_preview: true };
       if (link.startsWith('https://')) body.reply_markup = { inline_keyboard: [[{ text: 'Открыть в AF Admin →', url: link }]] };
-      const r = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      out.telegram = r.ok; if (!r.ok) console.error('telegram_error', r.status, (await r.text()).slice(0, 300));
+      let r = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      let j = await r.json().catch(() => ({}));
+      if (!r.ok && body.reply_markup && /button|url/i.test(String(j.description ?? ''))) { // retry without the link button
+        delete body.reply_markup;
+        r = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        j = await r.json().catch(() => ({}));
+      }
+      if (!r.ok && /parse|entit|tag/i.test(String(j.description ?? ''))) { // retry as plain text
+        const plain = { chat_id: tgChat, text: String(body.text).replace(/<[^>]+>/g, ''), disable_web_page_preview: true };
+        r = await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(plain) });
+        j = await r.json().catch(() => ({}));
+      }
+      out.telegram = r.ok ? { ok: true } : { ok: false, status: r.status, description: String(j.description ?? '').slice(0, 200) };
+      if (!r.ok) console.error('telegram_error', r.status, j.description);
     }
 
     // ------------------------------------------------------------ Email (Resend)
     const apiKey = Deno.env.get('RESEND_API_KEY'); const from = Deno.env.get('MAIL_FROM');
+    if (!apiKey || !from) out.email = { skipped: 'RESEND_API_KEY / MAIL_FROM not set (optional)' };
     if (apiKey && from && profile?.email && profile.notify_email) {
       const lang: 'ru' | 'en' = profile.lang === 'en' ? 'en' : 'ru';
       const title = (TITLE[n.type] ?? { ru: 'Уведомление AF Studio', en: 'AF Studio notification' })[lang];
@@ -155,11 +179,11 @@ Deno.serve(async (req) => {
         method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ from, to: [profile.email], subject: `AF Studio · ${title}`, html }),
       });
-      out.email = r.ok; if (!r.ok) console.error('resend_error', r.status, (await r.text()).slice(0, 300));
+      out.email = r.ok ? { ok: true } : { ok: false, status: r.status, description: (await r.text()).slice(0, 200) };
     }
     return ok(out);
   } catch (e) {
     console.error('notify_crash', String((e as Error)?.stack || e));
-    return ok({ error: 'server_error' }, 500);
+    return ok({ error: 'server_error', detail: String((e as Error)?.message || e).slice(0, 200) }, 500);
   }
 });
