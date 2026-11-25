@@ -202,10 +202,11 @@ function studioEnv(T, renderer) {
 }
 
 // ------------------------------------------------------------------ scene
-export async function mountAurum(canvasEl) {
+export async function mountAurum(canvasEl, opts = {}) {
+  const embedded = !!opts.embedded;
   const T = await loadThree().catch(() => null);
   if (!T || !canvasEl?.isConnected) return null;
-  const q = prefs.q3d; const mobile = isMobile(); const hi = q === 'high' && !mobile; const lo = q === 'low';
+  const q = prefs.q3d; const mobile = isMobile(); const hi = q === 'high' && !mobile && !embedded; const lo = q === 'low';
   const reduced = reducedMotion(); const SPEED = reduced ? 0.15 : 1;
 
   if (!lo) { try { for (const f of POST) await loadScript(EX + f); } catch { /* fallback to direct render */ } }
@@ -286,7 +287,7 @@ export async function mountAurum(canvasEl) {
   const floaters = floatDefs.map(([g, m, r, ph, y, sp]) => { const o = new T.Mesh(g, m); o.userData = { r, ph, y, sp }; hero.add(o); return o; });
 
   // gold dust with bokeh
-  const NDUST = hi ? 1900 : lo ? 420 : 950;
+  const NDUST = embedded ? (lo ? 220 : 600) : hi ? 1900 : lo ? 420 : 950;
   const dp = new Float32Array(NDUST * 3); const ds = new Float32Array(NDUST); const dph = new Float32Array(NDUST); const dsp = new Float32Array(NDUST);
   for (let i = 0; i < NDUST; i++) {
     dp.set([(Math.random() - 0.5) * 22, (Math.random() - 0.5) * 14, -9 + Math.random() * 14.5], i * 3);
@@ -307,51 +308,67 @@ export async function mountAurum(canvasEl) {
     composer = new T.EffectComposer(renderer, rt);
     composer.setPixelRatio(hi ? PR : 1);
     composer.addPass(new T.RenderPass(scene, camera));
-    bloom = new T.UnrealBloomPass(new T.Vector2(innerWidth, innerHeight), hi ? 0.95 : 0.8, 0.62, 0.82);
+    bloom = new T.UnrealBloomPass(new T.Vector2(512, 512), hi ? 0.95 : 0.8, 0.62, 0.82);
     composer.addPass(bloom);
     grade = new T.ShaderPass({ ...GRADE, uniforms: T.UniformsUtils.clone(GRADE.uniforms) });
-    grade.uniforms.uRes.value = new T.Vector2(innerWidth, innerHeight);
+    grade.uniforms.uRes.value = new T.Vector2(512, 512);
     composer.addPass(grade);
   }
   const setExposure = (v) => { if (grade) grade.uniforms.uExposure.value = v; else renderer.toneMappingExposure = v; };
 
   // ---------- layout
-  let aspect = 1; let baseFov = 35;
+  let aspect = 1; let baseFov = 35; let W = 1; let H = 1;
+  const size = () => { if (!embedded) return [innerWidth, innerHeight]; const r = canvasEl.getBoundingClientRect(); return [Math.max(1, r.width), Math.max(1, r.height)]; };
   function layout() {
-    const w = innerWidth; const h = innerHeight; aspect = w / h;
-    renderer.setSize(w, h, false);
-    if (composer) { composer.setSize(w, h); grade.uniforms.uRes.value.set(w, h); }
-    const portrait = aspect < 0.9;
+    [W, H] = size(); aspect = W / H;
+    renderer.setSize(W, H, false);
+    if (composer) { composer.setSize(W, H); grade.uniforms.uRes.value.set(W, H); }
+    const portrait = aspect < (embedded ? 1.25 : 0.9);
     baseFov = portrait ? 50 : 35; camera.fov = baseFov; camera.aspect = aspect; camera.updateProjectionMatrix();
-    hero.position.set(portrait ? 0 : 0.15, portrait ? 1.7 : 0.05, portrait ? -1.5 : 0);
-    hero.scale.setScalar(portrait ? 0.62 : 0.86 * Math.min(1, Math.max(0.72, aspect / 2.1)));
+    if (embedded) {
+      const halfH = Math.tan((baseFov / 2) * Math.PI / 180) * 9; const halfW = halfH * aspect;
+      if (portrait) { hero.position.set(0, -halfH * 0.32, 0); hero.scale.setScalar(Math.min(0.62, halfW / 3.2)); }
+      else { hero.position.set(Math.min(halfW * 0.5, halfW - 2.6), -0.1, 0); hero.scale.setScalar(Math.min(0.78, halfH / 2.75)); }
+    } else {
+      hero.position.set(portrait ? 0 : 0.15, portrait ? 1.7 : 0.05, portrait ? -1.5 : 0);
+      hero.scale.setScalar(portrait ? 0.62 : 0.86 * Math.min(1, Math.max(0.72, aspect / 2.1)));
+    }
     rays.position.set(hero.position.x, hero.position.y, -4); rays.scale.setScalar(portrait ? 18 : 26);
   }
-  addEventListener('resize', layout); layout();
+  const ro = embedded ? new ResizeObserver(() => layout()) : null;
+  if (ro) ro.observe(canvasEl); else addEventListener('resize', layout);
+  layout();
 
   // ---------- interaction
   let mx = 0; let my = 0; let tx = 0; let ty = 0; let lastMove = 0;
   const ray = new T.Raycaster(); const plane = new T.Plane(new T.Vector3(0, 0, 1), 0); const hit = new T.Vector3(); const ndcV = new T.Vector2();
   const onMove = (e) => {
-    tx = (e.clientX / innerWidth - 0.5) * 2; ty = (e.clientY / innerHeight - 0.5) * 2; lastMove = performance.now();
+    if (embedded) { const r = canvasEl.getBoundingClientRect(); tx = Math.max(-1.5, Math.min(1.5, ((e.clientX - r.left) / r.width - 0.5) * 2)); ty = Math.max(-1.5, Math.min(1.5, ((e.clientY - r.top) / r.height - 0.5) * 2)); }
+    else { tx = (e.clientX / innerWidth - 0.5) * 2; ty = (e.clientY / innerHeight - 0.5) * 2; }
+    lastMove = performance.now();
     ndcV.set(tx, -ty); ray.setFromCamera(ndcV, camera);
     if (ray.ray.intersectPlane(plane, hit)) dustU.uPointer.value.copy(hit);
   };
   const onTilt = (e) => { if (e.gamma == null) return; tx = Math.max(-1, Math.min(1, e.gamma / 30)); ty = Math.max(-1, Math.min(1, (e.beta - 45) / 30)); };
   const onDown = (e) => {
-    if (e.target.closest?.('.acc-card, a, button, input, label, .acc-lang')) return;
+    if (e.target.closest?.('.acc-card, a, button, input, label, textarea, select, .acc-lang')) return;
+    if (embedded) { const r = canvasEl.getBoundingClientRect(); if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return; }
     knotU.uRipple.value = 1; knotU.uRippleT.value = 0;
     knotU.uRippleDir.value.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
     rings.forEach((r) => { r.material.uniforms.uBoost.value = 2.4; });
   };
   addEventListener('pointermove', onMove, { passive: true }); addEventListener('pointerdown', onDown, { passive: true });
-  addEventListener('deviceorientation', onTilt, { passive: true });
+  if (!embedded) addEventListener('deviceorientation', onTilt, { passive: true });
 
   // ---------- loop
   const clock = new T.Clock(); let raf = 0; let running = true; let alive = true;
   const t0 = performance.now(); let warpStart = 0; let warpRes = null;
-  const onVis = () => { running = !document.hidden; if (running) { clock.getDelta(); loop(); } };
+  let onScreen = true;
+  const resume = () => { const want = !document.hidden && onScreen; if (want && !running) { running = true; clock.getDelta(); loop(); } else if (!want) running = false; };
+  const onVis = () => resume();
   document.addEventListener('visibilitychange', onVis);
+  const io = embedded && 'IntersectionObserver' in window ? new IntersectionObserver(([en]) => { onScreen = en.isIntersecting; resume(); }, { threshold: 0.02 }) : null;
+  io?.observe(canvasEl);
   const ease = (k) => 1 - Math.pow(1 - k, 4);
 
   function loop() {
@@ -385,7 +402,8 @@ export async function mountAurum(canvasEl) {
     bg.rotation.y = mx * 0.03; bg.rotation.x = -my * 0.02;
 
     // camera
-    camera.position.x = mx * 0.7 + Math.sin(t * 0.07) * 0.25; camera.position.y = -my * 0.45 + Math.cos(t * 0.05) * 0.15;
+    const par = embedded ? 0.35 : 1;
+    camera.position.x = (mx * 0.7 + Math.sin(t * 0.07) * 0.25) * par; camera.position.y = (-my * 0.45 + Math.cos(t * 0.05) * 0.15) * par;
     let exposure = ei * 1.0;
     if (warpStart) {
       const k = Math.min(1, (performance.now() - warpStart) / 1000); const e = k * k * k;
@@ -394,7 +412,7 @@ export async function mountAurum(canvasEl) {
       dustU.uWarp.value = e; exposure = 1 + e * 3.5;
       if (k >= 1 && warpRes) { const r = warpRes; warpRes = null; r(); }
     }
-    camera.lookAt(hero.position.x * 0.6, hero.position.y * 0.6, 0);
+    if (embedded) camera.lookAt(0, 0, 0); else camera.lookAt(hero.position.x * 0.6, hero.position.y * 0.6, 0);
     setExposure(exposure);
     if (composer) { grade.uniforms.uTime.value = el; composer.render(dt); } else renderer.render(scene, camera);
   }
@@ -407,7 +425,8 @@ export async function mountAurum(canvasEl) {
     },
     dispose() {
       alive = false; cancelAnimationFrame(raf);
-      removeEventListener('resize', layout); removeEventListener('pointermove', onMove); removeEventListener('pointerdown', onDown); removeEventListener('deviceorientation', onTilt);
+      removeEventListener('resize', layout); ro?.disconnect(); io?.disconnect();
+      removeEventListener('pointermove', onMove); removeEventListener('pointerdown', onDown); removeEventListener('deviceorientation', onTilt);
       document.removeEventListener('visibilitychange', onVis);
       keep.forEach((d) => d?.dispose?.());
       if (composer) { composer.renderTarget1?.dispose(); composer.renderTarget2?.dispose(); bloom?.dispose?.(); }

@@ -4,9 +4,7 @@ import { auth } from '../core/auth.js';
 import { supabase } from '../lib/supabase.js';
 import { listProjects, listThreads, getFavorites, getServices } from '../core/api.js';
 import { countUp } from '../legacy/widgets.js';
-import { mountShowcase } from '../three/showcase.js';
-import { MODELS } from '../three/models.js';
-import { getLang } from '../core/i18n.js';
+import { mountAurum } from '../three/aurum.js';
 import { ABOUT } from '../data/about.js';
 import { locj } from '../core/i18n.js';
 
@@ -23,8 +21,8 @@ export async function render(el) {
           <a class="af-btn af-btn--ghost magnetic" href="#/lab">${icon('lab')}<span>${t('nav.lab')}</span></a>
         </div>
       </div>
-      <div class="ov-hero__stage"><span class="ov-hero__ring" aria-hidden="true"></span><canvas aria-label="3D"></canvas>
-        <div class="ov-hero__caption"><span data-model-name></span><span class="ov-hero__dots" data-dots></span></div></div>
+      <canvas class="ov-hero__canvas" aria-hidden="true"></canvas>
+      <span class="ov-hero__hint" aria-hidden="true">${t('overview.heroHint')}</span>
     </section>
     ${auth.isAdmin ? html`<section class="ov-admin" data-io><div><b>${t('overview.adminTitle')}</b><p class="af-muted" style="font-size:13px">${t('overview.adminText')}</p></div>
       <a class="af-btn af-btn--primary af-btn--sm" href="admin.html">${icon('admin')}<span>${t('nav.admin')}</span></a></section>` : ''}
@@ -66,18 +64,12 @@ export async function render(el) {
     </section>`);
   reveal(el); magnetic(el);
   countUp(el.querySelector('[data-about-stats]'));
-  const SHOW = ['perfume', 'watch', 'car', 'headphones', 'sculpture', 'robot', 'crystal', 'pavilion'];
-  const dots = el.querySelector('[data-dots]');
-  dots.innerHTML = SHOW.map((id, i) => `<button type="button" data-i="${i}" aria-label="${i + 1}"></button>`).join('');
-  const show = await mountShowcase(el.querySelector('.ov-hero canvas'), {
-    ids: SHOW,
-    onChange: (i, id) => {
-      const nm = el.querySelector('[data-model-name]'); if (nm) nm.textContent = MODELS.find((m) => m.id === id)?.title[getLang()] || '';
-      dots.querySelectorAll('button').forEach((b, k) => b.classList.toggle('is-on', k === i));
-    },
+  let scene = null; let gone = false;
+  mountAurum(el.querySelector('.ov-hero__canvas'), { embedded: true }).then((sc) => {
+    if (gone || !el.isConnected) { sc?.dispose(); return; }
+    scene = sc; el.querySelector('.ov-hero')?.classList.add('is-live');
   });
-  dots.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => show.go(+b.dataset.i)));
-  const stopHero = () => show.dispose();
+  const stopHero = () => { gone = true; scene?.dispose(); scene = null; };
 
   try {
     const [projects, threads, favs, services, notifs, unread] = await Promise.all([

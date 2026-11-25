@@ -84,6 +84,7 @@ const DICT = {
       onbTitle1: 'Добро пожаловать в AF STUDIO', onbText1: 'Здесь собраны работы студии, инструменты планирования и ваш личный кабинет.',
       onbTitle2: 'Опишите задачу', onbText2: 'Конструктор проекта и AF AI помогут сформулировать ТЗ, а калькулятор — оценить бюджет.',
       onbTitle3: 'Следите за работой', onbText3: 'Статусы, файлы, согласование рендеров и переписка — в «Моих проектах».', onbDone: 'Начать',
+      heroHint: 'Нажмите на фон — по металлу пройдёт волна',
       adminTitle: 'Вы вошли как администратор', adminText: 'Заявки, статусы, файлы клиентов, контент, цены и AI — в панели AF Admin.',
     },
     portfolio: {
@@ -143,7 +144,10 @@ const DICT = {
       askAi: 'Обсудить с AF AI', empty: 'Тарифы ещё не настроены администратором.',
     },
     lab: {
-      screenshot: 'Скриншот', wireframe: 'Каркас (wireframe)', background: 'Фон', speed: 'Скорость вращения', bgs: { dark: 'Студия', warm: 'Тёплый', light: 'Светлый', grid: 'Сетка' },
+      variants: 'Варианты материалов', looks: { original: 'Исходный', clay: 'Clay', gloss: 'Лак', chrome: 'Хром', gold: 'Золото', wire: 'Каркас' },
+      colorHint: 'Цвет применяется в режимах Clay и Лак.', exposure: 'Экспозиция', lightAngle: 'Направление света', preparing: 'Подготовка сцены…',
+      demoTag: 'демо-модель', demoLicence: 'Демо-модели — открытые образцы Khronos glTF Sample Assets (CC0 / CC BY 4.0), не работы студии. Автор и лицензия указаны под сценой.',
+      screenshot: 'Скриншот', wireframe: 'Каркас (wireframe)', background: 'Фон', speed: 'Скорость вращения', bgs: { studio: 'Студия', warm: 'Тёплый', light: 'Светлый', env: 'Окружение' },
       title: '3D Lab', sub: 'Интерактивные демонстрации: вращайте, приближайте, меняйте материалы и свет.',
       models: 'Модели', demo: 'Демо-сцена', demoNote: 'Демонстрационный объект для показа возможностей viewer.',
       color: 'Цвет', material: 'Материал', light: 'Освещение', camera: 'Ракурс', autorotate: 'Автовращение', fullscreen: 'На весь экран',
@@ -267,6 +271,7 @@ const DICT = {
       onbTitle1: 'Welcome to AF STUDIO', onbText1: 'Studio works, planning tools and your personal client space — all here.',
       onbTitle2: 'Describe your task', onbText2: 'The project builder and AF AI help you write a brief; the calculator estimates the budget.',
       onbTitle3: 'Follow the work', onbText3: 'Statuses, files, render approvals and chat live in “My Projects”.', onbDone: 'Get started',
+      heroHint: 'Click the background to send a ripple through the metal',
       adminTitle: 'You are signed in as administrator', adminText: 'Requests, statuses, client files, content, pricing and AI live in AF Admin.',
     },
     portfolio: {
@@ -320,7 +325,10 @@ const DICT = {
       included: 'angles included: {n}', askAi: 'Discuss with AF AI', empty: 'Rates have not been configured by the administrator yet.',
     },
     lab: {
-      screenshot: 'Screenshot', wireframe: 'Wireframe', background: 'Background', speed: 'Rotation speed', bgs: { dark: 'Studio', warm: 'Warm', light: 'Light', grid: 'Grid' },
+      variants: 'Material variants', looks: { original: 'Original', clay: 'Clay', gloss: 'Lacquer', chrome: 'Chrome', gold: 'Gold', wire: 'Wireframe' },
+      colorHint: 'Colour applies to Clay and Lacquer looks.', exposure: 'Exposure', lightAngle: 'Light direction', preparing: 'Preparing scene…',
+      demoTag: 'demo model', demoLicence: 'Demo models are open Khronos glTF Sample Assets (CC0 / CC BY 4.0), not studio works. Author and licence are shown under the scene.',
+      screenshot: 'Screenshot', wireframe: 'Wireframe', background: 'Background', speed: 'Rotation speed', bgs: { studio: 'Studio', warm: 'Warm', light: 'Light', env: 'Environment' },
       title: '3D Lab', sub: 'Interactive demos: rotate, zoom, switch materials and lighting.', models: 'Models', demo: 'Demo scene',
       demoNote: 'Demonstration object showcasing the viewer.', color: 'Color', material: 'Material', light: 'Lighting', camera: 'Camera', autorotate: 'Auto-rotate',
       fullscreen: 'Fullscreen', zoomIn: 'Zoom in', zoomOut: 'Zoom out', reset: 'Reset view', loadLocal: 'Open your GLB', loading: 'Loading model…',
