@@ -1,23 +1,19 @@
 // =====================================================================
 // AF COMMAND CENTER — Overview (#/overview)
 // Every number, project, event and favourite comes from Supabase via the
-// existing API layer. The hero reuses the 3D Lab procedural model library
-// (js/three/models.js) through the existing showcase (js/three/showcase.js):
-// one WebGL scene, disposed when the route changes.
+// existing API layer. The hero background is the liquid-metal scene
+// (js/three/aurum.js, embedded mode): one WebGL context, paused off-screen,
+// disposed when the route changes.
 // =====================================================================
-import { t, loc, locj, getLang } from '../core/i18n.js';
+import { t, loc, locj } from '../core/i18n.js';
 import { html, icon, fmtRelative, projectNo, reveal, magnetic, skeleton, reducedMotion, $, $$ } from '../core/ui.js';
 import { auth } from '../core/auth.js';
 import { supabase } from '../lib/supabase.js';
 import { listProjects, getServices, getFavorites, getPortfolio, withMedia, projectCovers, listThreads, listNotifications, listFiles, markNotificationsRead } from '../core/api.js';
 import { countUp } from '../legacy/widgets.js';
-import { mountShowcase } from '../three/showcase.js';
-import { MODELS } from '../three/models.js';
+import { mountAurum } from '../three/aurum.js';
 import { STATUSES } from './projects.js';
 import { ABOUT } from '../data/about.js';
-
-// Showcase order — real ids of the 3D Lab library
-export const SHOWCASE_IDS = ['watch', 'perfume', 'headphones', 'car', 'pavilion', 'chair', 'lamp', 'robot', 'sculpture', 'crystal'];
 
 // ---------------------------------------------------------------- pure helpers (unit-tested)
 export const isActive = (p) => !['new', 'done'].includes(p.status);
@@ -51,20 +47,16 @@ export function buildActivity({ notifications = [], threads = [], files = [] }, 
 const NOTIF_ICON = { project_created: 'projects', project_status: 'refresh', project_done: 'check', message: 'messages', comment: 'pin', review_request: 'image', review_decision: 'check', new_user: 'user' };
 const CAT_KEY = { product: 'portfolio.fProduct', arch: 'portfolio.fArch', character: 'portfolio.fCharacter', motion: 'portfolio.fMotion' };
 
-function webglOk() {
-  try { const c = document.createElement('canvas'); return !!(c.getContext('webgl2') || c.getContext('webgl')); } catch { return false; }
-}
 const errBox = () => html`<div class="cc-error">${icon('refresh')}<span>${t('cc.loadError')}</span></div>`;
 
 // =====================================================================
 export async function render(el) {
-  const L = getLang();
   const name = firstName(auth.profile, auth.user?.email);
-  const models = SHOWCASE_IDS.map((id) => MODELS.find((m) => m.id === id)).filter(Boolean);
 
   el.innerHTML = String(html`
   <div class="cc">
-    <section class="cc-hero" data-reveal>
+    <section class="cc-hero cc-hero--metal" data-reveal>
+      <canvas class="cc-hero__canvas" aria-hidden="true"></canvas>
       <div class="cc-hero__text">
         <span class="cc-kicker"><i></i>${t('cc.kicker')}</span>
         <h2 class="cc-hero__title">${t('cc.hello', { name })}</h2>
@@ -73,23 +65,10 @@ export async function render(el) {
         <p class="cc-hero__scenario" data-scenario aria-live="polite"></p>
         <div class="cc-hero__cta">
           <a class="af-btn af-btn--gold magnetic" href="#/builder">${icon('builder')}<span>${t('cc.create')}</span></a>
-          <a class="af-btn af-btn--ghost magnetic" href="#/lab" data-lab-btn>${icon('lab')}<span>${t('cc.openLab')}</span></a>
+          <a class="af-btn af-btn--ghost magnetic" href="#/lab">${icon('lab')}<span>${t('cc.openLab')}</span></a>
         </div>
       </div>
-      <div class="cc-stage" data-stage>
-        <span class="cc-stage__glow" aria-hidden="true"></span>
-        <span class="cc-stage__ring" aria-hidden="true"></span>
-        <span class="cc-stage__shadow" aria-hidden="true"></span>
-        <canvas class="cc-stage__canvas" aria-label="${t('cc.fromLab')}"></canvas>
-        <div class="cc-stage__fallback" hidden><span class="cc-orb" aria-hidden="true"></span><p>${t('cc.noWebgl')}</p></div>
-        <div class="cc-stage__bar">
-          <button type="button" class="cc-nav" data-prev aria-label="${t('cc.prevModel')}">${icon('arrowL')}</button>
-          <div class="cc-stage__caption"><b data-model-name>${models[0]?.title[L] || ''}</b><small>${t('cc.fromLab')} · <span data-model-pos>1 / ${models.length}</span></small></div>
-          <button type="button" class="cc-nav" data-next aria-label="${t('cc.nextModel')}">${icon('arrowR')}</button>
-        </div>
-        <div class="cc-dots" role="tablist" data-dots>${models.map((m, i) => html`<button type="button" role="tab" class="${i === 0 ? 'is-on' : ''}" data-i="${i}" aria-label="${m.title[L]}" aria-selected="${i === 0}"></button>`)}</div>
-        <span class="cc-stage__hint">${t('cc.dragHint')}</span>
-      </div>
+      <span class="cc-hero__hint" aria-hidden="true">${t('overview.heroHint')}</span>
     </section>
 
     ${auth.isAdmin ? html`<section class="ov-admin cc-admin" data-io><div><b>${t('overview.adminTitle')}</b><p class="af-muted" style="font-size:13px">${t('overview.adminText')}</p></div>
@@ -143,34 +122,14 @@ export async function render(el) {
   </div>`);
   reveal(el); magnetic(el);
 
-  // ---------------------------------------------------------------- 3D hero (single scene)
-  const stage = $('[data-stage]', el);
-  let show = null; let gone = false;
-  const setModel = (i) => {
-    const m = models[i]; if (!m) return;
-    $('[data-model-name]', el).textContent = m.title[getLang()];
-    $('[data-model-pos]', el).textContent = `${i + 1} / ${models.length}`;
-    $$('[data-dots] button', el).forEach((b, k) => { b.classList.toggle('is-on', k === i); b.setAttribute('aria-selected', k === i); });
-  };
-  let cur = 0;
-  if (webglOk()) {
-    try {
-      show = await mountShowcase($('.cc-stage__canvas', el), { ids: models.map((m) => m.id), interval: 7000, onChange: (i) => { cur = i; setModel(i); } });
-      if (gone || !el.isConnected) { show?.dispose(); show = null; } else stage.classList.add('is-live');
-    } catch (e) { console.warn('[overview] showcase', e); show = null; }
-  }
-  if (!show && el.isConnected) { stage.classList.add('is-fallback'); $('.cc-stage__fallback', el).hidden = false; }
-  const go = (i) => { if (!show) return; show.go((i + models.length) % models.length); };
-  $$('[data-dots] button', el).forEach((b) => b.addEventListener('click', () => go(+b.dataset.i)));
-  $('[data-prev]', el).addEventListener('click', () => go(cur - 1));
-  $('[data-next]', el).addEventListener('click', () => go(cur + 1));
-  const lab = $('[data-lab-btn]', el);
-  lab.addEventListener('mouseenter', () => stage.classList.add('is-peek'));
-  lab.addEventListener('mouseleave', () => stage.classList.remove('is-peek'));
-  lab.addEventListener('focus', () => stage.classList.add('is-peek'));
-  lab.addEventListener('blur', () => stage.classList.remove('is-peek'));
+  // ---------------------------------------------------------------- 3D hero: liquid-metal scene (one WebGL context)
+  let scene3d = null; let gone = false;
+  mountAurum($('.cc-hero__canvas', el), { embedded: true }).then((sc) => {
+    if (gone || !el.isConnected) { sc?.dispose(); return; }
+    scene3d = sc; if (sc) $('.cc-hero', el)?.classList.add('is-live');
+  }).catch((e) => console.warn('[overview] 3D', e));
 
-  const cleanup = () => { gone = true; show?.dispose(); show = null; };
+  const cleanup = () => { gone = true; scene3d?.dispose(); scene3d = null; };
 
   // ---------------------------------------------------------------- data (each section independent)
   const [rProjects, rServices, rFavs, rNotifs, rUnread, rThreads, rFiles] = await Promise.allSettled([
