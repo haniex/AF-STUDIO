@@ -58,14 +58,12 @@ export async function render(el) {
     <section class="cc-hero cc-hero--metal" data-reveal>
       <canvas class="cc-hero__canvas" aria-hidden="true"></canvas>
       <div class="cc-hero__text">
-        <span class="cc-kicker"><i></i>${t('cc.kicker')}</span>
-        <h2 class="cc-hero__title">${t('cc.hello', { name })}</h2>
-        <p class="cc-hero__ready">${t('cc.ready')}</p>
-        <p class="cc-hero__lead">${t('cc.lead')}</p>
-        <p class="cc-hero__scenario" data-scenario aria-live="polite"></p>
+        <span class="cc-hero__badge">${t('overview.heroKicker')}</span>
+        <h2 class="cc-hero__title">${t('overview.hello', { name })}<br /><em>${t('overview.sub')}</em></h2>
+        <p class="cc-hero__lead">${t('overview.heroSub')}</p>
         <div class="cc-hero__cta">
-          <a class="af-btn af-btn--gold magnetic" href="#/builder">${icon('builder')}<span>${t('cc.create')}</span></a>
-          <a class="af-btn af-btn--ghost magnetic" href="#/lab">${icon('lab')}<span>${t('cc.openLab')}</span></a>
+          <a class="af-btn af-btn--gold magnetic" href="#/builder">${icon('builder')}<span>${t('overview.qBuilder')}</span></a>
+          <a class="af-btn af-btn--ghost magnetic" href="#/lab">${icon('lab')}<span>${t('nav.lab')}</span></a>
         </div>
       </div>
       <span class="cc-hero__hint" aria-hidden="true">${t('overview.heroHint')}</span>
@@ -86,7 +84,7 @@ export async function render(el) {
     <section class="cc-row cc-row--60">
       <article class="af-card cc-card cc-continue" data-io>
         <header class="cc-card__head"><h3>${t('cc.continue')}</h3><span data-continue-badge></span></header>
-        <div data-continue>${skeleton(1, 'cc-skel-block')}</div>
+        <div class="cc-continue__body" data-continue>${skeleton(1, 'cc-skel-block')}</div>
       </article>
       <article class="af-card cc-card" data-io>
         <header class="cc-card__head"><h3>${t('cc.quick')}</h3></header>
@@ -143,9 +141,9 @@ export async function render(el) {
   const favs = ok(rFavs) ? rFavs.value : null;
   const unread = ok(rUnread) ? rUnread.value : null;
 
-  // scenario line
+  // scenario line (only if the hero contains one)
   const sc = $('[data-scenario]', el);
-  if (projects) {
+  if (sc && projects) {
     sc.innerHTML = String(html`<span>${t('cc.' + scenario(projects))}</span>${unread ? html` <a class="cc-pill" href="#/notifications">${icon('bell')}${t('cc.newEvents', { n: unread })}</a>` : ''}`);
     sc.classList.add('is-in');
   }
@@ -176,17 +174,24 @@ export async function render(el) {
       if (!el.isConnected) return cleanup;
       const idx = STATUSES.indexOf(p.status); const isNew = p.status === 'new';
       cBadge.innerHTML = String(html`<span class="af-pill af-pill--${p.status}">${t(isNew ? 'cc.badgeNew' : 'cc.badgeActive')}</span>`);
+      const next = STATUSES[idx + 1];
       cBox.innerHTML = String(html`
         <a class="cc-project" href="#/projects/${p.id}">
           <span class="cc-project__cover">${cover ? html`<img src="${cover}" alt="" loading="lazy" />` : html`<span>${projectNo(p.number)}</span>`}</span>
           <span class="cc-project__body">
             <small class="cc-project__no">${projectNo(p.number)} · ${loc(svc, 'title') || t('cc.noService')}</small>
             <b class="cc-project__title">${p.title}</b>
-            <span class="cc-project__meta"><span class="af-pill af-pill--${p.status}">${t('status.' + p.status)}</span><span>${t('cc.updated', { date: fmtRelative(p.updated_at || p.created_at) })}</span></span>
+            <span class="cc-project__meta">${t('cc.updated', { date: fmtRelative(p.updated_at || p.created_at) })}</span>
             ${isNew ? html`<span class="cc-project__note">${t('cc.requestNote')}</span>` : ''}
           </span>
         </a>
-        <div class="pr-steps cc-steps" aria-label="${t('cc.stage', { status: t('status.' + p.status) })}">${STATUSES.map((s, i) => html`<div class="${i < idx ? 'is-done' : ''} ${i === idx ? 'is-on' : ''}"><i></i><span>${t('status.' + s)}</span></div>`)}</div>
+        <div class="cc-progress" role="group" aria-label="${t('cc.stage', { status: t('status.' + p.status) })}">
+          <div class="cc-progress__bar">${STATUSES.map((st, i) => html`<i class="${i < idx ? 'is-done' : ''} ${i === idx ? 'is-on' : ''}"></i>`)}</div>
+          <div class="cc-progress__labels">
+            <span><b>${t('cc.stageOf', { n: idx + 1, total: STATUSES.length })}</b> · ${t('status.' + p.status)}</span>
+            ${next ? html`<span class="cc-progress__next">${t('cc.nextStage', { status: t('status.' + next) })}</span>` : ''}
+          </div>
+        </div>
         <div class="cc-project__actions"><a class="af-btn af-btn--gold af-btn--sm" href="#/projects/${p.id}">${t('cc.openProject')} →</a>
           <a class="af-btn af-btn--ghost af-btn--sm" href="#/messages">${icon('messages')}<span>${t('nav.messages')}</span></a></div>`);
     }
@@ -227,6 +232,7 @@ export async function render(el) {
   const gBox = $('[data-favs]', el);
   if (!favs) gBox.innerHTML = String(errBox());
   else if (!favs.size) {
+    gBox.classList.add('is-empty');
     gBox.innerHTML = String(html`<div class="cc-empty cc-empty--wide"><span class="cc-empty__orb" aria-hidden="true"></span><div><b>${t('cc.favEmpty')}</b></div>
       <a class="af-btn af-btn--ghost af-btn--sm" href="#/portfolio">${icon('portfolio')}<span>${t('cc.openPortfolio')}</span></a></div>`);
     $$('[data-gal]', el).forEach((b) => (b.hidden = true));
