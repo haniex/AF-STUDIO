@@ -21,3 +21,6 @@ export const filterConversations = (list, q) => {
 };
 /** Effective context of a request: ТЗ and estimate always use AF STUDIO data. */
 export const effectiveScope = (mode, scope) => (AF_ONLY.includes(mode) ? 'af_studio' : SCOPES.includes(scope) ? scope : 'general');
+
+/** Only real https links from the server are rendered as sources. */
+export const safeSourceUrl = (u) => (typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/i.test(u) && u.length <= 2000 ? u : '');

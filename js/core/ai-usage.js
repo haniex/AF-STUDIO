@@ -30,7 +30,7 @@ export function normalizeUsage(raw) {
     used: int(m.used), limit: int(m.limit), remaining: int(m.remaining), retry_after: int(m.retry_after),
     reset_in: int(m.reset_in), window_seconds: int(m.window_seconds, 60) || 60,
   } : null;
-  return { enabled: raw.enabled !== false, daily, minute };
+  return { enabled: raw.enabled !== false, web_search: raw.web_search !== false, daily, minute };
 }
 
 /** Visual level for a percentage / remaining value. */
@@ -46,7 +46,7 @@ export function liveUsage(s = snap, at = fetchedAt, now = Date.now()) {
   if (!s) return null;
   const el = Math.max(0, Math.floor((now - at) / 1000));
   const resetMs = s.daily.reset_at ? Date.parse(s.daily.reset_at) - now : null;
-  const out = { enabled: s.enabled, daily: { ...s.daily, reset_in: resetMs == null ? null : Math.max(0, Math.round(resetMs / 1000)) }, minute: null };
+  const out = { enabled: s.enabled, web_search: s.web_search, daily: { ...s.daily, reset_in: resetMs == null ? null : Math.max(0, Math.round(resetMs / 1000)) }, minute: null };
   if (out.daily.reset_in === 0 && resetMs != null && resetMs <= 0) out.daily = { ...out.daily, stale: true };
   if (s.minute) {
     const m = { ...s.minute };

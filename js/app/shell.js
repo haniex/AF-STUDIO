@@ -246,6 +246,7 @@ function closePops() {
 /** Called by the router on every navigation */
 export function setActive(path, titleKey) {
   if (path !== '/settings') sessionStorage.setItem('af.lastRoute', location.hash || '#/overview');
+  if (path !== '/settings' && !path.startsWith('/ai')) sessionStorage.setItem('af.prevRoute', location.hash || '#/overview');
   $('#af-title', root) && ($('#af-title', root).textContent = t(titleKey));
   document.title = `${t(titleKey)} — AF STUDIO`;
   highlight(path);

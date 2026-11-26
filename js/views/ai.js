@@ -15,7 +15,7 @@ import { setUsage, fetchUsage, fmtDuration } from '../core/ai-usage.js';
 import { mountUsage } from '../components/usage-meter.js';
 import { openSettingsCenter } from '../components/settings-center.js';
 import { renderAnswer, toPlainText, downloadText, safeFileName, extFor } from '../core/ai-render.js';
-import { OUTPUT_TYPES, SCOPES, AF_ONLY, groupByDate, filterConversations, effectiveScope } from '../core/ai-chat-utils.js';
+import { OUTPUT_TYPES, SCOPES, AF_ONLY, groupByDate, filterConversations, effectiveScope, safeSourceUrl } from '../core/ai-chat-utils.js';
 
 export { OUTPUT_TYPES, groupByDate, filterConversations, effectiveScope };
 
@@ -33,7 +33,11 @@ const IC = {
   gear: I('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7.4 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.9 14H3.8a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 5.4 7.4a1.6 1.6 0 0 0-.3-1.8L5 5.5a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9.8a1.6 1.6 0 0 0 1-1.5V1.5"/>'),
   plus: I('<path d="M12 5v14M5 12h14"/>'),
   x: I('<path d="M6 6l12 12M18 6 6 18"/>'),
+  globe: I('<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.8 3.9 5.8 3.9 9s-1.3 6.2-3.9 9c-2.6-2.8-3.9-5.8-3.9-9S9.4 5.8 12 3Z"/>'),
 };
+const WEB_KEY = 'af.ai.web'; // per-device UI choice; the server still decides (admin switch, scope)
+const webPref = () => { try { return localStorage.getItem(WEB_KEY) !== '0'; } catch (_) { return true; } };
+
 
 let mode = 'chat';
 let outputType = null;
@@ -45,6 +49,7 @@ export async function render(el, { params }) {
   let scope = 'general';
   let conversations = []; let messages = []; let busy = false; let blocked = null; let search = '';
   let scopeColumn = true; // false until migration 20261126000003 is applied
+  let web = webPref(); let webAdmin = true; // webAdmin: server-side switch (ai_settings.web_search)
   if (!conversationId) { mode = ['chat', 'brief', 'estimate'].includes(prefs.default_mode) ? prefs.default_mode : 'chat'; outputType = null; }
 
   el.innerHTML = String(html`
@@ -56,6 +61,11 @@ export async function render(el, { params }) {
     </aside>
     <section class="ax-main">
       <header class="ax-head">
+        <div class="ax-lights" role="group" aria-label="${t('ax.window')}">
+          <button type="button" class="ax-light ax-light--r" data-light="close" aria-label="${t('ax.lightClose')}" title="${t('ax.lightClose')}"><i aria-hidden="true">×</i></button>
+          <button type="button" class="ax-light ax-light--y" data-light="side" aria-label="${t('ax.lightSide')}" title="${t('ax.lightSide')}"><i aria-hidden="true">−</i></button>
+          <button type="button" class="ax-light ax-light--g" data-light="full" aria-label="${t('ax.lightFull')}" title="${t('ax.lightFull')}"><i aria-hidden="true">+</i></button>
+        </div>
         <button type="button" class="ax-ib ax-head__hist" data-toggle-list aria-label="${t('ax.history')}">${raw(IC.history)}</button>
         <b class="ax-title">AF AI</b>
         <div class="ax-scope" role="radiogroup" aria-label="${t('ax.scopeLabel')}" data-scope></div>
@@ -72,11 +82,12 @@ export async function render(el, { params }) {
             <button type="button" class="ax-ib ax-plus" data-plus aria-label="${t('ax.createMenu')}" aria-haspopup="menu" title="${t('ax.createMenu')}">${raw(IC.plus)}</button>
             <span data-mode-chip></span>
             <button type="button" class="ax-ctx" data-ctx></button>
+            <button type="button" class="ax-web" data-web aria-pressed="false">${raw(IC.globe)}<span>${t('ax.web')}</span></button>
             <span class="ax-grow"></span>
             <button type="submit" class="ax-send" aria-label="${t('common.send')}">${icon('send')}</button>
           </div>
         </div>
-        <p class="ax-foot"><span>${t('ax.disclaimer')}</span>${ephemeral ? html`<span>${t('usage.ephemeral')} <button type="button" class="af-link" data-ai-prefs>${t('nav.settings')}</button></span>` : ''}</p>
+        <p class="ax-foot"><span data-disclaimer>${t('ax.disclaimer')}</span>${ephemeral ? html`<span>${t('usage.ephemeral')} <button type="button" class="af-link" data-ai-prefs>${t('nav.settings')}</button></span>` : ''}</p>
       </form>
     </section>
     <div class="ax-menu" data-menu hidden role="menu"></div>
@@ -122,6 +133,15 @@ export async function render(el, { params }) {
     ctx.textContent = t('ax.scope.' + eff); ctx.classList.toggle('is-af', eff === 'af_studio');
     ctx.title = locked ? t('ax.scopeLocked') : t('ax.scopeSwitch');
     ctx.disabled = locked;
+    paintWeb();
+  }
+  function paintWeb() {
+    const b = $('[data-web]', el); if (!b) return;
+    const allowed = webAdmin && effectiveScope(mode, scope) === 'general';
+    const on = allowed && web;
+    b.classList.toggle('is-on', on); b.setAttribute('aria-pressed', String(on)); b.disabled = !allowed;
+    b.title = !webAdmin ? t('ax.webOffAdmin') : !allowed ? t('ax.webAfOnly') : on ? t('ax.webOnHint') : t('ax.webOffHint');
+    const d = $('[data-disclaimer]', el); if (d) d.textContent = t(on ? 'ax.disclaimerWeb' : 'ax.disclaimer');
   }
   async function setScope(next) {
     if (!SCOPES.includes(next) || next === scope || AF_ONLY.includes(mode)) return;
@@ -134,6 +154,30 @@ export async function render(el, { params }) {
     toast(t('ax.scopeSaved', { scope: t('ax.scope.' + next) }), 'ok', 2200);
   }
   $('[data-ctx]', el).addEventListener('click', () => setScope(scope === 'general' ? 'af_studio' : 'general'));
+  $('[data-web]', el).addEventListener('click', () => {
+    web = !web; try { localStorage.setItem(WEB_KEY, web ? '1' : '0'); } catch (_) { /* noop */ }
+    paintWeb(); toast(t(web ? 'ax.webOn' : 'ax.webOff'), 'info', 1800);
+  });
+
+  // ---------------------------------------------------------------- window "traffic lights"
+  const onFullKey = (e) => { if (e.key === 'Escape' && document.body.classList.contains('ax-full') && menu.hidden && !document.querySelector('.af-modal')) setFull(false); };
+  function setFull(on) {
+    document.body.classList.toggle('ax-full', on);
+    const g = $('[data-light="full"]', el);
+    if (g) { g.setAttribute('aria-pressed', String(on)); g.title = t(on ? 'ax.lightExit' : 'ax.lightFull'); g.setAttribute('aria-label', g.title); }
+    if (on) document.addEventListener('keydown', onFullKey); else document.removeEventListener('keydown', onFullKey);
+  }
+  cleanups.push(() => setFull(false));
+  $$('[data-light]', el).forEach((b) => b.addEventListener('click', () => {
+    const a = b.dataset.light;
+    if (a === 'close') {
+      setFull(false);
+      const prev = sessionStorage.getItem('af.prevRoute');
+      if (prev && /^#\/[\w\-/?=&%.]*$/.test(prev)) location.hash = prev; else navigate('/overview');
+    }
+    if (a === 'side') { if (isMobile()) root.classList.toggle('is-list'); else root.classList.toggle('is-side-hidden'); }
+    if (a === 'full') setFull(!document.body.classList.contains('ax-full'));
+  }));
 
   // ---------------------------------------------------------------- mode chip & "+" menu
   function paintMode() {
@@ -240,6 +284,7 @@ export async function render(el, { params }) {
     return html`<article class="ax-msg ax-msg--ai" data-i="${i}">
       <div class="ax-answer af-md">${r.html}</div>
       ${m.truncated ? html`<p class="ax-note">${t('ax.truncated')}</p>` : ''}
+      ${sourcesHtml(m.sources)}
       <div class="ax-tools">
         <button type="button" data-act="copy">${icon('copy')}<span>${t('common.copy')}</span></button>
         ${m.id ? html`<button type="button" data-act="save" class="${m.saved ? 'is-on' : ''}">${icon('check')}<span>${t(m.saved ? 'ai.savedResult' : 'ai.saveResult')}</span></button>` : ''}
@@ -249,6 +294,15 @@ export async function render(el, { params }) {
         ${isLast ? html`<button type="button" data-act="continue">${raw(IC.next)}<span>${t('ax.continue')}</span></button>` : ''}
         ${af ? html`<button type="button" data-act="builder">${icon('builder')}<span>${t('ai.toBuilder')}</span></button>` : ''}
       </div></article>`;
+  }
+  function sourcesHtml(src) {
+    const items = (src?.items || []).map((x) => ({ title: String(x?.title || '').slice(0, 120), url: safeSourceUrl(x?.url) })).filter((x) => x.url);
+    const queries = (src?.queries || []).map((q) => String(q).slice(0, 160)).filter(Boolean).slice(0, 5);
+    if (!items.length && !queries.length) return '';
+    return html`<div class="ax-sources">
+      ${items.length ? html`<p>${raw(IC.globe)}<span>${t('ax.sources')}</span></p><div class="ax-src">${items.map((x, i) => html`<a href="${x.url}" target="_blank" rel="noopener noreferrer nofollow" title="${x.title}"><b>${i + 1}</b><span>${x.title}</span></a>`)}</div>` : ''}
+      ${queries.length ? html`<div class="ax-queries"><small>${t('ax.searchedFor')}</small>${queries.map((q) => html`<a href="https://www.google.com/search?q=${encodeURIComponent(q)}" target="_blank" rel="noopener noreferrer nofollow">${q}</a>`)}</div>` : ''}
+    </div>`;
   }
   function paint() {
     if (!messages.length) return paintEmpty();
@@ -300,7 +354,8 @@ export async function render(el, { params }) {
   async function loadConversation() {
     if (!conversationId) { messages = []; paint(); return; }
     body.innerHTML = '<div class="ax-loading"><div class="af-skel af-skel-row"></div><div class="af-skel af-skel-row"></div></div>';
-    const { data, error } = await supabase.from('ai_messages').select('id,role,content,saved,created_at').eq('conversation_id', conversationId).order('id');
+    let { data, error } = await supabase.from('ai_messages').select('id,role,content,saved,created_at,sources').eq('conversation_id', conversationId).order('id');
+    if (error && /sources/.test(error.message || '')) ({ data, error } = await supabase.from('ai_messages').select('id,role,content,saved,created_at').eq('conversation_id', conversationId).order('id'));
     if (error || !data) { body.innerHTML = String(html`<div class="ax-empty"><h2>${t('errors.not_found')}</h2><p><a class="af-link" href="#/ai">${t('ax.newChat')}</a></p></div>`); return; }
     messages = data; paint();
   }
@@ -318,14 +373,17 @@ export async function render(el, { params }) {
     sendBtn.disabled = busy || !!blocked; sendBtn.title = blocked ? msg : '';
   }
   const usageEl = $('[data-usage]', el);
-  cleanups.push(mountUsage(usageEl, { variant: 'compact', extended: () => getPreferences().ai.extended_stats !== false, pollMs: 45000, maxAge: 0, onState: (u) => applyGate(u) }));
+  cleanups.push(mountUsage(usageEl, { variant: 'compact', extended: () => getPreferences().ai.extended_stats !== false, pollMs: 45000, maxAge: 0, onState: (u) => { applyGate(u); const w = u?.web_search !== false; if (u && w !== webAdmin) { webAdmin = w; paintWeb(); } } }));
   const openUsage = () => openSettingsCenter({ category: 'ai', focus: 'ai.usage_daily' });
   usageEl.addEventListener('click', (e) => { if (!e.target.closest('[data-um-retry]')) openUsage(); });
   usageEl.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openUsage(); } });
   $('[data-ai-prefs]', el)?.addEventListener('click', () => openSettingsCenter({ category: 'ai', focus: 'ai.save_history' }));
 
   // ---------------------------------------------------------------- send / regenerate
-  const typing = () => body.insertAdjacentHTML('beforeend', `<div class="ax-msg ax-msg--ai" data-typing><div class="ax-typing" aria-label="${t('ai.thinking')}"><i></i><i></i><i></i></div></div>`);
+  const typing = () => {
+    const searching = web && webAdmin && effectiveScope(mode, scope) === 'general';
+    body.insertAdjacentHTML('beforeend', `<div class="ax-msg ax-msg--ai" data-typing><div class="ax-typing" aria-label="${t('ai.thinking')}"><i></i><i></i><i></i>${searching ? `<span>${t('ax.thinkingWeb')}</span>` : ''}</div></div>`);
+  };
   async function send({ regen = false } = {}) {
     const q = ta.value.trim();
     if (!q || busy || blocked) return;
@@ -340,13 +398,15 @@ export async function render(el, { params }) {
     try {
       const payload = { message: q, mode: usedMode, lang: getLang(), scope }; // ТЗ / смета are switched to AF STUDIO on the server automatically
       if (usedMode === 'create') payload.output_type = usedType || 'other';
+      payload.web = web && webAdmin;
       if (!ephemeral && conversationId) payload.conversation_id = conversationId;
       if (regen && !ephemeral && conversationId) payload.regenerate = true;
       if (ephemeral) payload.history = messages.slice(0, -1).slice(-12).map((m) => ({ role: m.role, content: String(m.content).slice(0, 8000) }));
       const res = await callFunction('ai-chat', payload);
       if (res.quota) setUsage(res.quota); else fetchUsage();
+      const srcMeta = res.web && (res.web.sources?.length || res.web.queries?.length) ? { items: res.web.sources || [], queries: res.web.queries || [] } : null;
       if (res.ephemeral || !res.conversation_id) {
-        messages = [...messages, { role: 'assistant', content: res.reply, truncated: res.truncated }];
+        messages = [...messages, { role: 'assistant', content: res.reply, truncated: res.truncated, sources: srcMeta }];
         paint();
       } else {
         const isNew = !conversationId;
@@ -354,7 +414,7 @@ export async function render(el, { params }) {
         if (isNew) history.replaceState(null, '', '#/ai/' + conversationId);
         const { data } = await supabase.from('ai_messages').select('id,role,content,saved').eq('conversation_id', conversationId).order('id');
         messages = data && data.length ? data : [...messages, { role: 'assistant', content: res.reply }];
-        if (res.truncated && messages.length) messages[messages.length - 1].truncated = true;
+        if (messages.length) { const last = messages[messages.length - 1]; if (res.truncated) last.truncated = true; if (srcMeta) last.sources = srcMeta; }
         paint(); loadList();
       }
     } catch (e) {

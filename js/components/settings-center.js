@@ -143,6 +143,7 @@ const SECTIONS = {
         ${row('ai.project_context', sw(k('ai', 'use_project_context'), a.use_project_context, { label: lbl('ai.project_context') }), { extra: html`<p class="sc-note sc-note--warn">${t('sc.contextNote')}</p>` })}
         ${row('ai.moodboard_images', sw(k('ai', 'moodboard_images'), a.moodboard_images, { label: lbl('ai.moodboard_images') }))}
         ${row('ai.extended_stats', sw(k('ai', 'extended_stats'), a.extended_stats, { label: lbl('ai.extended_stats') }))}
+        ${row('ai.web', html`<a class="af-btn af-btn--ghost af-btn--sm" href="#/ai" data-sc-close>${t('nav.ai')}</a>`, { extra: html`<p class="sc-note">${t('sc.webNote')}</p>` })}
       `)}
       <div class="sc-privacy">${icon('shield')}<div><b>${t('sc.aiPrivacyTitle')}</b><p>${t('sc.aiPrivacyText')}</p></div></div>`;
   },
@@ -552,6 +553,7 @@ function build(startCat, startFocus) {
     if (cat === 'ai') {
       const box = $('[data-usage-full]', root);
       if (box) cleanups.push(mountUsage(box, { variant: 'full', maxAge: 0 }));
+      $$('a[data-sc-close]', root).forEach((a) => a.addEventListener('click', () => close()));
     }
     if (cat === 'workspace') $('[data-kbd]', root)?.addEventListener('click', () => openShortcuts());
     if (cat === 'experimental') {
