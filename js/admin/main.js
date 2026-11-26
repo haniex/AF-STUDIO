@@ -10,6 +10,7 @@ import { setLang, getLang, onLang } from '../core/i18n.js';
 import { a } from './i18n.js';
 import { applyPrefs } from '../core/prefs.js';
 import { initFx } from '../core/fx.js';
+import { initMobile } from '../core/mobile.js';
 
 const NAV = [
   ['/dashboard', 'dashboard', 'overview'], ['/projects', 'projects', 'projects'], ['/messages', 'messages', 'messages'], ['/users', 'users', 'user'],
@@ -76,6 +77,7 @@ function shell() {
   initTheme();
   applyPrefs();
   initFx();
+  initMobile();
   if (!isConfigured()) return denied();
   let res;
   try { res = await bootstrap(); } catch { return denied(); }

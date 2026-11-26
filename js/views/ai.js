@@ -405,6 +405,9 @@ export async function render(el, { params }) {
       const res = await callFunction('ai-chat', payload);
       if (res.quota) setUsage(res.quota); else fetchUsage();
       const srcMeta = res.web && (res.web.sources?.length || res.web.queries?.length) ? { items: res.web.sources || [], queries: res.web.queries || [] } : null;
+      if (res.web?.notice && payload.web) {
+        toast(t(res.web.notice === 'search_quota' ? 'ax.webQuota' : 'ax.webUnavailable') + (res.web.detail ? ` [${res.web.detail}]` : ''), 'info', 9000);
+      }
       if (res.ephemeral || !res.conversation_id) {
         messages = [...messages, { role: 'assistant', content: res.reply, truncated: res.truncated, sources: srcMeta }];
         paint();
@@ -420,9 +423,9 @@ export async function render(el, { params }) {
     } catch (e) {
       const code = e.code || 'generic';
       messages = snapshot; $('[data-typing]', body)?.remove();
-      const known = ['ai_disabled', 'ai_not_configured', 'daily_limit', 'rate_limited', 'provider_busy', 'provider_error', 'provider_timeout', 'too_long', 'network', 'server_config', 'bad_output_type', 'bad_scope', 'bad_mode'];
+      const known = ['ai_disabled', 'ai_not_configured', 'daily_limit', 'rate_limited', 'provider_busy', 'provider_quota', 'provider_error', 'provider_timeout', 'too_long', 'network', 'server_config', 'bad_output_type', 'bad_scope', 'bad_mode'];
       const key = known.includes(code) ? (code.startsWith('bad_') ? 'ax.err.' + code : 'errors.' + code) : 'errors.generic';
-      const tech = key === 'errors.generic' || key === 'errors.server_config' ? ` [${e.status || ''} ${code}${e.detail ? ': ' + e.detail : ''}]` : '';
+      const tech = key === 'errors.generic' || key === 'errors.server_config' || ((code === 'provider_busy' || code === 'provider_error' || code === 'provider_quota') && e.detail) ? ` [${e.status || ''} ${code}${e.detail ? ': ' + e.detail : ''}]` : '';
       if (e.details?.quota) setUsage(e.details.quota); else if (['daily_limit', 'rate_limited', 'ai_disabled'].includes(code)) fetchUsage();
       toast(t(key, { limit: e.details?.limit || '' }) + tech + (e.details?.refunded ? ' ' + t('usage.refunded') : ''), 'err', code === 'rate_limited' ? 5000 : 12000);
       ta.value = q; autosize(); paint(); // the question is never lost

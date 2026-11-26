@@ -8,6 +8,7 @@ import { route, startRouter, stopRouter } from './core/router.js';
 import { $, reducedMotion } from './core/ui.js';
 import { applyPrefs } from './core/prefs.js';
 import { initFx } from './core/fx.js';
+import { initMobile } from './core/mobile.js';
 import { loadPreferences, getPreferences, clearPreferences, applySnapshot } from './core/preferences.js';
 import { clearUsage } from './core/ai-usage.js';
 
@@ -95,6 +96,7 @@ document.addEventListener('click', (e) => { if (e.target.closest('[data-reload]'
   applyPrefs();
   applySnapshot(); // visual hint only (no flash); replaced by server data after sign-in
   initFx();
+  initMobile();
   applyI18n(document);
   if (location.hash.startsWith('#/')) sessionStorage.setItem('af.returnTo', location.hash);
   $('#af-boot-text') && ($('#af-boot-text').textContent = t('boot.checking'));

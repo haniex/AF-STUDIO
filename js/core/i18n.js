@@ -56,7 +56,7 @@ const DICT = {
       not_found: 'Не найдено или нет доступа.', file_too_big: 'Файл больше {mb} МБ.', file_type: 'Этот тип файла не поддерживается.',
       ai_disabled: 'AF AI временно отключён администратором.', ai_not_configured: 'AF AI ещё не подключён владельцем платформы.',
       daily_limit: 'Дневной лимит AI-запросов исчерпан ({limit}). Возвращайтесь завтра или напишите администратору.',
-      provider_busy: 'AI-сервис перегружен. Повторите через минуту.', provider_error: 'AI-сервис не ответил. Повторите позже.',
+      provider_busy: 'AI-сервис перегружен. Повторите через минуту.', provider_quota: 'У ключа Gemini студии закончилась квота Google (бесплатный лимит или оплата). Запросы снова заработают после сброса квоты или подключения оплаты в Google AI Studio.', provider_error: 'AI-сервис не ответил. Повторите позже.',
       provider_timeout: 'AI отвечал слишком долго. Попробуйте короче сформулировать вопрос.', too_long: 'Сообщение слишком длинное.',
       invalid_password: 'Неверный пароль.', last_admin: 'Нельзя удалить единственного администратора.', confirmation_required: 'Введите слово подтверждения.',
       already_decided: 'Решение по этой версии уже принято.',
@@ -179,7 +179,7 @@ const DICT = {
       zoomIn: 'Приблизить', zoomOut: 'Отдалить', reset: 'Сбросить вид', loadLocal: 'Открыть свой GLB', loading: 'Загрузка модели…',
       loadError: 'Не удалось загрузить модель.', mats: { original: 'Исходный', gloss: 'Глянец', metal: 'Металл', glass: 'Стекло', matte: 'Мат', gold: 'Золото', carbon: 'Карбон' },
       lights: { studio: 'Студия', sunset: 'Закат', dramatic: 'Драма', neon: 'Неон' }, cams: { front: 'Спереди', side: 'Сбоку', top: 'Сверху', hero: '3/4' },
-      hint: 'Перетаскивайте для вращения · колесо/щипок для масштаба', webglOff: 'Ваш браузер не поддерживает WebGL.',
+      hint: 'Перетаскивайте для вращения · колесо/щипок для масштаба', hintTouch: 'Один палец — вращение · два пальца — масштаб и сдвиг', webglOff: 'Ваш браузер не поддерживает WebGL.',
       bottle: 'Флакон', knot: 'Узел', headset: 'Наушники', localNote: 'Файл открывается только в вашем браузере и никуда не загружается.',
     },
     projects: {
@@ -195,7 +195,7 @@ const DICT = {
       markerMode: 'Режим меток', studio: 'Студия', you: 'Вы', all: 'Все статусы', filter: 'Фильтр',
     },
     files: {
-      title: 'Файлы', sub: 'Референсы, ТЗ, материалы и итоговые файлы ваших проектов.', all: 'Все', kinds: {
+      title: 'Файлы', preview: 'Открыть предпросмотр: {name}', sub: 'Референсы, ТЗ, материалы и итоговые файлы ваших проектов.', all: 'Все', kinds: {
         reference: 'Референс', image: 'Изображение', brief: 'ТЗ', material: 'Материал', moodboard: 'Мудборд', render: 'Рендер', final: 'Итоговый',
       }, kind: 'Тип', project: 'Проект', noProject: 'Без проекта', deleteConfirm: 'Удалить файл «{name}»?', protected: 'Файл передан студией и защищён от изменений.',
     },
@@ -353,6 +353,7 @@ const DICT = {
       webOnHint: 'AF AI сам решает, когда нужен поиск Google, и показывает источники. Нажмите, чтобы выключить',
       webOffHint: 'Ответы только по знаниям модели. Нажмите, чтобы включить поиск',
       webAfOnly: 'В контексте AF STUDIO используются только данные студии', webOffAdmin: 'Поиск в интернете отключён администратором',
+      webQuota: 'Лимит поиска Google для ключа Gemini исчерпан — ответ подготовлен без интернета.', webUnavailable: 'Поиск Google недоступен для текущего ключа или модели — ответ подготовлен без интернета.',
       thinkingWeb: 'думаю и при необходимости ищу в интернете…', sources: 'Источники', searchedFor: 'Поиск Google:',
       window: 'Окно AF AI', lightClose: 'Закрыть AF AI', lightSide: 'Скрыть / показать историю', lightFull: 'Развернуть на весь экран', lightExit: 'Выйти из полноэкранного режима (Esc)',
       err: { bad_output_type: 'Неизвестный тип результата.', bad_scope: 'Неизвестный контекст.', bad_mode: 'Неизвестный режим.' },
@@ -407,7 +408,7 @@ const DICT = {
       forbidden: 'You do not have permission for this action.', not_found: 'Not found or no access.', file_too_big: 'File is larger than {mb} MB.',
       file_type: 'This file type is not supported.', ai_disabled: 'AF AI is temporarily disabled by the administrator.',
       ai_not_configured: 'AF AI is not connected by the platform owner yet.', daily_limit: 'Daily AI limit reached ({limit}). Come back tomorrow or message the studio.',
-      provider_busy: 'AI service is busy. Retry in a minute.', provider_error: 'AI service did not respond. Try later.',
+      provider_busy: 'AI service is busy. Retry in a minute.', provider_quota: 'The studio’s Gemini key has run out of its Google quota (free limit or billing). Requests work again after the quota resets or billing is enabled in Google AI Studio.', provider_error: 'AI service did not respond. Try later.',
       provider_timeout: 'AI took too long. Try a shorter question.', too_long: 'Message is too long.', invalid_password: 'Wrong password.',
       last_admin: 'You cannot delete the only administrator.', confirmation_required: 'Type the confirmation word.', already_decided: 'A decision for this version was already made.',
       server_config: 'The AF AI server is not fully configured (no database access). Please tell the administrator.',
@@ -515,7 +516,7 @@ const DICT = {
       fullscreen: 'Fullscreen', zoomIn: 'Zoom in', zoomOut: 'Zoom out', reset: 'Reset view', loadLocal: 'Open your GLB', loading: 'Loading model…',
       loadError: 'Could not load the model.', mats: { original: 'Original', gloss: 'Gloss', metal: 'Metal', glass: 'Glass', matte: 'Matte', gold: 'Gold', carbon: 'Carbon' },
       lights: { studio: 'Studio', sunset: 'Sunset', dramatic: 'Dramatic', neon: 'Neon' }, cams: { front: 'Front', side: 'Side', top: 'Top', hero: '3/4' },
-      hint: 'Drag to rotate · wheel/pinch to zoom', webglOff: 'Your browser does not support WebGL.', bottle: 'Bottle', knot: 'Knot', headset: 'Headphones',
+      hint: 'Drag to rotate · wheel/pinch to zoom', hintTouch: 'One finger rotates · two fingers zoom and pan', webglOff: 'Your browser does not support WebGL.', bottle: 'Bottle', knot: 'Knot', headset: 'Headphones',
       localNote: 'The file opens only in your browser and is not uploaded anywhere.',
     },
     projects: {
@@ -528,7 +529,7 @@ const DICT = {
       changesRequested: 'Changes requested', pending: 'Awaiting decision', markerMode: 'Marker mode', studio: 'Studio', you: 'You', all: 'All statuses', filter: 'Filter',
     },
     files: {
-      title: 'Files', sub: 'References, briefs, materials and final files of your projects.', all: 'All', kinds: {
+      title: 'Files', preview: 'Open preview: {name}', sub: 'References, briefs, materials and final files of your projects.', all: 'All', kinds: {
         reference: 'Reference', image: 'Image', brief: 'Brief', material: 'Material', moodboard: 'Moodboard', render: 'Render', final: 'Final',
       }, kind: 'Type', project: 'Project', noProject: 'No project', deleteConfirm: 'Delete file “{name}”?', protected: 'Delivered by the studio and protected from changes.',
     },
@@ -686,6 +687,7 @@ const DICT = {
       webOnHint: 'AF AI decides when a Google search is needed and shows sources. Click to turn off',
       webOffHint: 'Answers from the model’s knowledge only. Click to enable web search',
       webAfOnly: 'The AF STUDIO context uses studio data only', webOffAdmin: 'Web search is disabled by the administrator',
+      webQuota: 'The Google Search quota of the Gemini key is used up — answered without the web.', webUnavailable: 'Google Search is not available for the current key or model — answered without the web.',
       thinkingWeb: 'thinking and searching the web if needed…', sources: 'Sources', searchedFor: 'Google search:',
       window: 'AF AI window', lightClose: 'Close AF AI', lightSide: 'Hide / show history', lightFull: 'Full screen', lightExit: 'Exit full screen (Esc)',
       err: { bad_output_type: 'Unknown result type.', bad_scope: 'Unknown context.', bad_mode: 'Unknown mode.' },

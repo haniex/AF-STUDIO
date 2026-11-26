@@ -1,5 +1,5 @@
 import { t, loc } from '../core/i18n.js';
-import { html, icon, md, fmtDate, fmtDateTime, fmtMoney, fmtSize, projectNo, reveal, toast, confirmDialog, emptyState, errorState, skeleton, $, $$, setBusy } from '../core/ui.js';
+import { html, icon, md, fmtDate, fmtDateTime, fmtMoney, fmtSize, projectNo, reveal, toast, confirmDialog, modal, emptyState, errorState, skeleton, $, $$, setBusy } from '../core/ui.js';
 import { supabase, signedUrl, signedUrls } from '../lib/supabase.js';
 import { auth } from '../core/auth.js';
 import { getProject, getServices, projectHistory, listFiles, uploadFile, deleteFile } from '../core/api.js';
@@ -121,6 +121,22 @@ export function fileRow(f, thumb, { showProject = '' } = {}) {
 }
 
 export function bindFileRows(root, files, refresh) {
+  // tap on an image thumbnail → full-size preview (signed URL; nothing is executed)
+  $$('.pr-file__ico img', root).forEach((img) => {
+    const row = img.closest('[data-file]'); const f = files.find((x) => x.id === row?.dataset.file);
+    if (!f || !f.mime?.startsWith('image/')) return;
+    img.setAttribute('role', 'button'); img.setAttribute('tabindex', '0'); img.setAttribute('aria-label', t('files.preview', { name: f.name }));
+    const open = async () => {
+      const url = await signedUrl('project-files', f.path);
+      if (!url) return toast(t('errors.generic'), 'err');
+      const body = document.createElement('div'); body.className = 'af-preview';
+      const im = new Image(); im.alt = f.name; im.src = url; im.decoding = 'async'; body.appendChild(im);
+      const res = await modal({ title: f.name, size: 'lg', body, actions: [{ label: t('common.close'), value: null }, { label: t('common.download'), primary: true, value: 'dl' }] });
+      if (res === 'dl') { const d = await signedUrl('project-files', f.path, { download: f.name }); if (d) window.open(d, '_blank', 'noopener'); }
+    };
+    img.addEventListener('click', open);
+    img.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  });
   $$('[data-dl]', root).forEach((b) => b.addEventListener('click', async () => {
     const f = files.find((x) => x.id === b.dataset.dl);
     const url = await signedUrl('project-files', f.path, { download: f.name });

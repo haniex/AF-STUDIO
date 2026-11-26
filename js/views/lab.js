@@ -89,7 +89,7 @@ export async function render(el) {
         <div class="lab-badge"><span class="af-pill af-pill--plain" data-badge>—</span></div>
         <div class="lab-loading" data-loading><div class="lab-loading__ring"><span data-pct>0%</span></div><p data-load-text>${t('lab.loading')}</p></div>
         <div class="lab-hud">
-          <span class="lab-hud__hint">${t('lab.hint')}</span>
+          <span class="lab-hud__hint">${t(matchMedia('(pointer: coarse)').matches ? 'lab.hintTouch' : 'lab.hint')}</span>
           <div class="lab-hud__btns">
             <button type="button" data-zoom="in" aria-label="${t('lab.zoomIn')}" title="${t('lab.zoomIn')}">${icon('plus')}</button>
             <button type="button" data-zoom="out" aria-label="${t('lab.zoomOut')}" title="${t('lab.zoomOut')}"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
@@ -150,7 +150,8 @@ export async function render(el) {
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ antialias: q !== 'low', alpha: false, powerPreference: 'high-performance' }); }
   catch { setLoading(true, t('lab.webglOff')); return; }
-  renderer.setPixelRatio(Math.min(devicePixelRatio, q === 'high' ? 2 : q === 'medium' ? 1.5 : 1));
+  // phones: cap the pixel ratio (a 3× screen at full resolution costs 9× the pixels and drains the battery)
+  renderer.setPixelRatio(Math.min(devicePixelRatio, mobile ? (q === 'low' ? 1 : 1.5) : q === 'high' ? 2 : q === 'medium' ? 1.5 : 1));
   renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
   renderer.shadowMap.enabled = q !== 'low'; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.domElement.classList.add('lab-canvas');
@@ -169,7 +170,7 @@ export async function render(el) {
   controls.minDistance = 0.4; controls.maxDistance = 6; controls.maxPolarAngle = Math.PI * 0.53;
 
   const key = new THREE.DirectionalLight(0xffffff, 3); key.castShadow = q !== 'low';
-  key.shadow.mapSize.set(q === 'high' ? 2048 : 1024, q === 'high' ? 2048 : 1024); key.shadow.bias = -0.0002; key.shadow.normalBias = 0.02; key.shadow.radius = 4;
+  const sm = q === 'high' && !mobile ? 2048 : mobile ? 512 : 1024; key.shadow.mapSize.set(sm, sm); key.shadow.bias = -0.0002; key.shadow.normalBias = 0.02; key.shadow.radius = 4;
   const rim = new THREE.DirectionalLight(0xcfe0ff, 2);
   scene.add(key, key.target, rim);
   const ground = new THREE.Mesh(new THREE.CircleGeometry(3, 64), new THREE.ShadowMaterial({ opacity: 0.38 }));
@@ -377,9 +378,16 @@ export async function render(el) {
   $('[data-reset]', el).addEventListener('click', () => { if (cur) frame(cur.root); flyTo('hero'); });
   $('[data-auto]', el).addEventListener('change', (e) => { controls.autoRotate = e.target.checked; });
   $('[data-speed]', el).addEventListener('input', (e) => { controls.autoRotateSpeed = +e.target.value; });
+  // iPhone Safari has no Fullscreen API for elements → CSS full-screen fallback (Esc / button exits)
+  const pseudoFs = (on) => { stage.classList.toggle('is-pseudo-fs', on); document.body.classList.toggle('af-no-scroll', on); };
+  const onFsKey = (e) => { if (e.key === 'Escape' && stage.classList.contains('is-pseudo-fs')) pseudoFs(false); };
+  document.addEventListener('keydown', onFsKey);
   $('[data-fs]', el).addEventListener('click', () => {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else (stage.requestFullscreen || stage.webkitRequestFullscreen)?.call(stage)?.catch?.(() => toast(t('errors.generic'), 'err'));
+    if (stage.classList.contains('is-pseudo-fs')) return pseudoFs(false);
+    if (document.fullscreenElement || document.webkitFullscreenElement) return (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+    const req = stage.requestFullscreen || stage.webkitRequestFullscreen;
+    if (!req) return pseudoFs(true);
+    try { const r = req.call(stage); if (r?.catch) r.catch(() => pseudoFs(true)); } catch { pseudoFs(true); }
   });
   $('[data-shot]', el).addEventListener('click', () => {
     renderer.render(scene, camera);
@@ -418,6 +426,7 @@ export async function render(el) {
 
   return () => {
     alive = false; token++; renderer.setAnimationLoop(null); ro.disconnect(); io.disconnect(); controls.dispose();
+    document.removeEventListener('keydown', onFsKey); document.body.classList.remove('af-no-scroll');
     cache.forEach((en) => dispose(en.root)); cache.clear();
     Object.values(lookMats).forEach((m) => m?.dispose()); Object.values(bgTex).forEach((x) => x.dispose());
     envTex.dispose(); pmrem.dispose(); draco.dispose(); ktx2.dispose();
