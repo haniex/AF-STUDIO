@@ -129,3 +129,9 @@ supabase secrets set RESEND_API_KEY=... MAIL_FROM="AF Studio <studio@ваш-до
 4. Authentication → Rate Limits — поднять лимиты входа и проверки кодов; для писем подключить SMTP.
 
 Подробности — `docs/AF-AI-3.1-REPORT.md`.
+
+
+## AF AI 3.2 — интернет-поиск
+1. SQL Editor → `supabase/migrations/20261126000004_ai_web.sql`.
+2. Edge Functions → ai-chat → вставить `supabase/dashboard/ai-chat.ts` → Deploy.
+Поиск включается/выключается в AF Admin → AI Settings. Подробности — `docs/AF-AI-3.1-REPORT.md` (раздел 3.2).

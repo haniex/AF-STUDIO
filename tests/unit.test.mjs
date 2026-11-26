@@ -393,7 +393,9 @@ test('ai server contract: output types, scopes and prompts (ai-chat source)', ()
   assert.ok(src.includes("return json(req, { error: 'bad_output_type' }, 400)") && src.includes("return json(req, { error: 'bad_scope' }, 400)"));
   const general = src.split('general: {')[1].split('af: {')[0];
   assert.ok(!/ONLY the knowledge base|ТОЛЬКО из базы/.test(general), 'general prompt is not limited to the AF knowledge base');
-  assert.ok(/NOT limited to AF STUDIO/.test(general) && /no live web access/.test(general) && /Never claim that you ran code/.test(general));
+  assert.ok(/NOT limited to AF STUDIO/.test(general) && /Never claim that you ran code/.test(general));
+  const webBlock = src.split('web: {')[1].split('create: {')[0];
+  assert.ok(/Google Search tool/.test(webBlock) && /no internet access in this request/.test(webBlock), 'web on/off instructions exist');
   assert.ok(src.includes("if (scope === 'af_studio') kb = await loadKnowledge(db, lang);"), 'AF knowledge loaded only for the AF scope');
   assert.ok(/const scope: Scope = AF_MODES\.includes\(mode\) \? 'af_studio' : requested;/.test(src));
   assert.ok(src.indexOf("ai_rate_consume") < src.indexOf("ai_consume', {") && src.includes('await refund(db, uid, day)'), 'every mode is rate-limited before the daily reservation');
@@ -411,4 +413,51 @@ test('auth: recovery via token_hash / 6-digit code is wired', () => {
   assert.ok(tpl.includes('{{ .TokenHash }}') && tpl.includes('type=recovery') && tpl.includes('{{ .Token }}'));
   const shell = readFileSync(join(ROOT, 'js/app/shell.js'), 'utf8');
   assert.ok(!/path: '\/settings'/.test(shell), 'Settings is no longer a sidebar item');
+});
+
+
+// =====================================================================
+// AF AI 3.2 — web search, sources, theme files, favicon
+// =====================================================================
+test('ai web: search tool is added only for the general scope and can be disabled by admin/user', () => {
+  const src = readFileSync(join(ROOT, 'supabase/functions/ai-chat/index.ts'), 'utf8');
+  assert.ok(src.includes("const useWeb = scope === 'general' && s.web_search !== false && body.web !== false;"));
+  assert.ok(src.includes("...(withWeb ? { tools: [{ google_search: {} }] } : {})"));
+  assert.ok(src.includes('res = await call(false);'), 'falls back to an answer without search if the tool is rejected');
+  assert.ok(src.includes('export function extractGrounding') && src.includes("if (sources.length >= 8) break;"));
+  assert.ok(/if \(!\/\^https:\\\/\\\/\/i\.test\(url\)/.test(src), 'only https sources are accepted');
+  const mig = readFileSync(join(ROOT, 'supabase/migrations/20261126000004_ai_web.sql'), 'utf8');
+  assert.ok(mig.includes('add column if not exists web_search boolean not null default true') && mig.includes('add column if not exists sources jsonb'));
+});
+
+test('ai web: source links are sanitized on the client', () => {
+  assert.equal(C.safeSourceUrl('https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc'), 'https://vertexaisearch.cloud.google.com/grounding-api-redirect/abc');
+  assert.equal(C.safeSourceUrl('javascript:alert(1)'), '');
+  assert.equal(C.safeSourceUrl('http://insecure.example'), '');
+  assert.equal(C.safeSourceUrl('https://x.y/"><script>'), '');
+  assert.equal(C.safeSourceUrl(null), '');
+});
+
+test('theme: scrollbars and text-field focus follow the site theme on every page', () => {
+  const css = readFileSync(join(ROOT, 'css/scrollbars.css'), 'utf8');
+  assert.ok(css.includes('html { color-scheme: dark; }') && css.includes('scrollbar-color') && css.includes('::-webkit-scrollbar-thumb'));
+  assert.ok(/textarea, select\):focus-visible/.test(css));
+  for (const page of ['index.html', 'admin.html']) assert.ok(readFileSync(join(ROOT, page), 'utf8').includes('css/scrollbars.css'), page);
+  const ai = readFileSync(join(ROOT, 'css/ai.css'), 'utf8');
+  assert.ok(ai.includes('.ax :is(input, textarea):focus') && ai.includes('.ax-light--r') && ai.includes('.ax-light--g'));
+});
+
+test('favicon: files exist and are linked with paths relative to the repository folder', () => {
+  const svg = readFileSync(join(ROOT, 'favicon.svg'), 'utf8');
+  assert.ok(svg.startsWith('<svg') && svg.includes('viewBox="0 0 64 64"') && !/<script|<text/i.test(svg));
+  const png = (f) => readFileSync(join(ROOT, f));
+  const size = (b) => [b.readUInt32BE(16), b.readUInt32BE(20)];
+  assert.deepEqual(size(png('favicon-16x16.png')), [16, 16]);
+  assert.deepEqual(size(png('favicon-32x32.png')), [32, 32]);
+  assert.deepEqual(size(png('apple-touch-icon.png')), [180, 180]);
+  for (const page of ['index.html', 'admin.html', 'project.html']) {
+    const h = readFileSync(join(ROOT, page), 'utf8');
+    assert.ok(h.includes('<link rel="icon" href="favicon.svg" type="image/svg+xml" />'), page);
+    assert.ok(h.includes('href="apple-touch-icon.png"') && !/href="\/favicon/.test(h), page + ': relative paths (work under /AF-STUDIO/)');
+  }
 });

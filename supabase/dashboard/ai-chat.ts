@@ -1,4 +1,4 @@
-// AF STUDIO — Edge Function «ai-chat» AF AI 3.1 (single-file version for the Supabase dashboard editor).
+// AF STUDIO — Edge Function «ai-chat» AF AI 3.2 (single-file version for the Supabase dashboard editor).
 // Paste the whole file into Edge Functions → ai-chat → Code → index.ts and press Deploy. Turn OFF «Verify JWT».
 import { createClient, type SupabaseClient, type User } from 'jsr:@supabase/supabase-js@2';
 
@@ -61,7 +61,7 @@ export async function readJson<T>(req: Request, maxBytes = 64_000): Promise<T | 
 }
 
 // ---------------------------------------------------------------------
-// AF AI 3.1 — universal creative assistant + AF STUDIO specialization.
+// AF AI 3.2 — universal creative assistant + web search (Grounding with Google Search) + AF STUDIO specialization.
 // One chat, one history, one quota system, one Gemini integration.
 // Secrets (never shipped to the browser): GEMINI_API_KEY, AF_SERVICE_KEY / SUPABASE_SERVICE_ROLE_KEY.
 //
@@ -84,6 +84,7 @@ interface Body {
   scope?: Scope;
   output_type?: OutputType;
   regenerate?: boolean;
+  web?: boolean;
   lang?: 'ru' | 'en';
   context?: Record<string, unknown>;
   history?: { role?: string; content?: string }[];
@@ -98,7 +99,10 @@ interface AiPrefs {
   extended_stats: boolean;
 }
 type Db = ReturnType<typeof adminClient>;
-type Settings = { enabled: boolean; model: string; daily_limit: number; per_minute_limit: number; max_input_chars: number; extra_instructions: string };
+type Settings = { enabled: boolean; model: string; daily_limit: number; per_minute_limit: number; max_input_chars: number; extra_instructions: string; web_search?: boolean };
+type Source = { title: string; url: string };
+type GroundingChunk = { web?: { uri?: string; title?: string } };
+type GroundingMeta = { groundingChunks?: GroundingChunk[]; webSearchQueries?: string[] };
 type Minute = { allowed?: boolean; used: number; limit: number; remaining: number; retry_after: number; reset_in: number; window_seconds: number };
 
 const MODES: Mode[] = ['chat', 'create', 'brief', 'estimate', 'builder_hint', 'moodboard'];
@@ -115,7 +119,7 @@ const MAX_OUTPUT_TOKENS = 4096; // hard server ceiling, never taken from the cli
 const MISSING_FN = (e: { code?: string; message?: string } | null) =>
   !!e && (e.code === 'PGRST202' || e.code === '42883' || /could not find the function|does not exist/i.test(e.message ?? ''));
 const MISSING_COL = (e: { code?: string; message?: string } | null) =>
-  !!e && (e.code === '42703' || e.code === 'PGRST204' || /column .*scope|scope.* column/i.test(e.message ?? ''));
+  !!e && (e.code === '42703' || e.code === 'PGRST204' || /column .*(scope|sources)|(scope|sources).* column/i.test(e.message ?? ''));
 
 const todayUtc = () => new Date().toISOString().slice(0, 10);
 const nextUtcMidnight = (now = new Date()) =>
@@ -144,7 +148,6 @@ const P = {
       'You can explain, analyse, brainstorm, create, edit, translate, compare, calculate, plan, write code and prepare documents.',
       'When the user asks for a result, first understand which concrete artifact is needed, then produce it in full. Do not answer with generic advice when a ready result is requested.',
       'Never redirect the user to the AF STUDIO administrator for questions unrelated to the studio.',
-      'Use your own knowledge for general tasks. Do not invent current events, live prices, exchange rates or other real-time data — you have no live web access; say so honestly when it matters.',
       'Never claim that you ran code, created files in a real environment, generated images, published websites or performed actions in external services — no such tools are connected.',
       'If a task is very large, propose a sensible breakdown and complete the nearest useful part right away.',
       'If the user asks about AF STUDIO itself (its prices, services, terms, projects), say that exact studio facts are available in the "AF STUDIO" context (switch at the top of the chat) and do not invent them.',
@@ -156,7 +159,6 @@ const P = {
       'Умеешь объяснять, анализировать, придумывать, создавать, редактировать, переводить, сравнивать, рассчитывать, составлять планы, писать код и готовить документы.',
       'Когда просят результат, сначала пойми, какой конкретный артефакт нужен, и создай его целиком. Не ограничивайся общими советами, если просят готовый результат.',
       'Не перенаправляй пользователя к администратору AF STUDIO по вопросам, не связанным со студией.',
-      'Для общих задач используй свои знания. Не выдумывай текущие события, актуальные цены, курсы и другие данные в реальном времени — доступа к интернету у тебя нет, честно говори об этом, когда это важно.',
       'Никогда не утверждай, что запускал код, создавал файлы в реальной среде, генерировал изображения, публиковал сайты или выполнял действия во внешних сервисах — таких инструментов не подключено.',
       'Если задача очень большая, предложи разумное разбиение и сразу выполни ближайшую полезную часть.',
       'Если спрашивают о самой AF STUDIO (цены, услуги, условия, проекты), скажи, что точные данные студии доступны в контексте «AF STUDIO» (переключатель вверху чата), и не выдумывай их.',
@@ -176,6 +178,16 @@ const P = {
       'Любая оценка предварительная: окончательная стоимость — после согласования брифа.',
       'По договору, оплате и всему, где нужен человек, предлагай кнопку «Подключить администратора».',
     ].join('\n'),
+  },
+  web: {
+    on: {
+      en: 'WEB ACCESS: you have the Google Search tool. Use it whenever the answer depends on current or verifiable facts — news, events, prices, exchange rates, weather, releases, versions, people in office, statistics, schedules, or anything you are not sure about. Prefer recent, authoritative sources, mention dates of the facts you report, and if sources disagree say so. Do not search for things you can answer from general knowledge (writing, code, explanations). Never invent sources or links — the interface shows the real sources under your answer.',
+      ru: 'ДОСТУП В ИНТЕРНЕТ: у тебя есть инструмент Google Search. Используй его, когда ответ зависит от актуальных или проверяемых фактов — новости, события, цены, курсы, погода, релизы, версии, кто занимает должность, статистика, расписания или всё, в чём ты не уверен. Предпочитай свежие и авторитетные источники, указывай даты фактов, при расхождении источников скажи об этом. Не ищи то, что решается общими знаниями (тексты, код, объяснения). Никогда не выдумывай источники и ссылки — интерфейс сам покажет реальные источники под ответом.',
+    },
+    off: {
+      en: 'You have no internet access in this request. Do not invent current events, live prices, exchange rates or other real-time data; say honestly that the data may be outdated and suggest enabling "Internet" in the composer.',
+      ru: 'В этом запросе доступа в интернет нет. Не выдумывай текущие события, актуальные цены, курсы и другие данные в реальном времени; честно скажи, что данные могут быть устаревшими, и предложи включить «Интернет» в поле ввода.',
+    },
   },
   create: {
     en: 'CREATE MODE: deliver a complete, ready-to-use result in the requested format — not a description of how to make it. Start with the result itself; add at most 1–3 short lines of notes after it (assumptions, what to adjust). If the request is clearly too large for one answer, start with exactly: "This is a big task. Let\'s split it into several parts. First I\'ll prepare the first working part." — then a short plan and the complete first part.',
@@ -217,9 +229,11 @@ const P = {
 };
 
 /** Compose the system instruction for one request (pure, unit-tested). */
-export function buildSystem(o: { lang: 'ru' | 'en'; scope: Scope; mode: Mode; outputType?: OutputType | null; replyLang: string; style: string; extra?: string; kb?: string }) {
+export function buildSystem(o: { lang: 'ru' | 'en'; scope: Scope; mode: Mode; outputType?: OutputType | null; replyLang: string; style: string; extra?: string; kb?: string; web?: boolean; today?: string }) {
   const L = o.lang;
-  const parts = [P.base[L], o.scope === 'af_studio' ? P.af[L] : P.general[L], o.replyLang, o.style];
+  const today = o.today || new Date().toISOString().slice(0, 10);
+  const parts = [P.base[L], o.scope === 'af_studio' ? P.af[L] : P.general[L],
+    (L === 'en' ? 'Today is ' : 'Сегодня ') + today + ' (UTC).', o.scope === 'general' ? P.web[o.web ? 'on' : 'off'][L] : '', o.replyLang, o.style];
   if (o.mode === 'create') parts.push(P.create[L], P.outputs[o.outputType && OUTPUT_TYPES.includes(o.outputType) ? o.outputType : 'other'][L]);
   if (o.mode === 'brief' || o.mode === 'estimate' || o.mode === 'builder_hint' || o.mode === 'moodboard') parts.push(P[o.mode][L]);
   if (o.extra && o.extra.trim()) {
@@ -230,6 +244,22 @@ export function buildSystem(o: { lang: 'ru' | 'en'; scope: Scope; mode: Mode; ou
   parts.push(P.safety[L]);
   if (o.scope === 'af_studio' && o.kb) parts.push('', '=== AF STUDIO KNOWLEDGE BASE ===', o.kb);
   return parts.filter(Boolean).join('\n\n');
+}
+
+/** Extract real web sources + queries from Gemini groundingMetadata (pure, unit-tested). */
+export function extractGrounding(cand: Record<string, unknown> | null | undefined): { sources: Source[]; queries: string[] } {
+  const gm = (cand?.groundingMetadata ?? {}) as GroundingMeta;
+  const seen = new Set<string>(); const sources: Source[] = [];
+  for (const ch of gm.groundingChunks ?? []) {
+    const url = String(ch?.web?.uri ?? ''); const title = String(ch?.web?.title ?? '').trim().slice(0, 120);
+    if (!/^https:\/\//i.test(url) || url.length > 2000) continue;
+    const key = (title || url).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key); sources.push({ title: title || new URL(url).hostname, url });
+    if (sources.length >= 8) break;
+  }
+  const queries = [...new Set((gm.webSearchQueries ?? []).map((q) => String(q).trim().slice(0, 160)).filter(Boolean))].slice(0, 5);
+  return { sources, queries };
 }
 
 /** Max output tokens per request (server-side only). */
@@ -278,7 +308,7 @@ async function usageSnapshot(db: Db, uid: string, s: Settings, minute: Minute | 
     if (!MISSING_FN(peek.error)) console.error('ai_rate_peek_failed', peek.error.message);
     m = await legacyMinute(db, uid, s.per_minute_limit);
   }
-  return { enabled: !!s.enabled, daily: dailyBlock(u?.count ?? 0, s.daily_limit), minute: minuteBlock(m), server_time: new Date().toISOString() };
+  return { enabled: !!s.enabled, web_search: s.web_search !== false, daily: dailyBlock(u?.count ?? 0, s.daily_limit), minute: minuteBlock(m), server_time: new Date().toISOString() };
 }
 
 async function legacyMinute(db: Db, uid: string, limit: number): Promise<Minute> {
@@ -470,8 +500,10 @@ async function handle(req: Request): Promise<Response> {
     balanced: lang === 'en' ? 'Answer with a natural level of detail; use Markdown (headings, lists, tables, code blocks) only where it helps.' : 'Отвечай с естественной степенью подробности; Markdown (заголовки, списки, таблицы, блоки кода) — только там, где он помогает.',
     detailed: lang === 'en' ? 'Give thorough, well-structured answers: reasoning, options, risks and next steps.' : 'Отвечай подробно и структурированно: логика, варианты, риски и следующие шаги.',
   }[prefs.response_style];
+  // web search: general context only (studio facts must come from the AF knowledge base), admin can switch it off
+  const useWeb = scope === 'general' && s.web_search !== false && body.web !== false;
   const system = buildSystem({
-    lang, scope, mode, outputType, replyLang, style,
+    lang, scope, mode, outputType, replyLang, style, web: useWeb,
     // owner notes are AF-oriented; in general scope they are applied only to studio questions
     extra: s.extra_instructions || '', kb: scope === 'af_studio' ? kb : '',
   }) + (scope === 'general' && kb ? '\n\n' + kb : '');
@@ -486,18 +518,26 @@ async function handle(req: Request): Promise<Response> {
   const model = (Deno.env.get('GEMINI_MODEL') || s.model || 'gemini-3.5-flash-lite').replace(/[^a-z0-9.\-]/gi, '');
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 60_000);
-  let reply = ''; let truncated = false;
+  let reply = ''; let truncated = false; let webUsed = false;
+  let grounding: { sources: Source[]; queries: string[] } = { sources: [], queries: [] };
   let failure: { code: string; status: number } | null = null;
+  const call = (withWeb: boolean) => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    method: 'POST', signal: ctrl.signal,
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: withWeb ? system : system.replace(P.web.on[lang], P.web.off[lang]) }] },
+      contents,
+      ...(withWeb ? { tools: [{ google_search: {} }] } : {}),
+      generationConfig: { temperature: mode === 'create' ? 0.7 : scope === 'af_studio' ? 0.4 : 0.6, maxOutputTokens: tokenBudget(mode, prefs.response_style) },
+    }),
+  });
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST', signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents,
-        generationConfig: { temperature: mode === 'create' ? 0.7 : scope === 'af_studio' ? 0.4 : 0.6, maxOutputTokens: tokenBudget(mode, prefs.response_style) },
-      }),
-    });
+    let res = await call(useWeb);
+    if (!res.ok && useWeb && res.status === 400) {
+      // the configured model / key may not allow the search tool → answer without it instead of failing
+      console.error('gemini_search_rejected', (await res.text()).slice(0, 300));
+      res = await call(false);
+    } else webUsed = useWeb;
     if (!res.ok) {
       console.error('gemini_error', res.status, (await res.text()).slice(0, 500));
       failure = { code: res.status === 429 ? 'provider_busy' : 'provider_error', status: 502 };
@@ -506,6 +546,7 @@ async function handle(req: Request): Promise<Response> {
       const cand = data?.candidates?.[0];
       reply = (cand?.content?.parts ?? []).map((p: { text?: string }) => p.text ?? '').join('').trim();
       truncated = cand?.finishReason === 'MAX_TOKENS';
+      if (webUsed) grounding = extractGrounding(cand);
     }
   } catch (e) {
     console.error('gemini_exception', String(e));
@@ -530,10 +571,14 @@ async function handle(req: Request): Promise<Response> {
     }
     if (conversationId) {
       if (replaceIds.length) await db.from('ai_messages').delete().in('id', replaceIds).eq('conversation_id', conversationId);
-      const { error: mErr } = await db.from('ai_messages').insert([
+      const rows: Record<string, unknown>[] = [
         { conversation_id: conversationId, user_id: uid, role: 'user', content: message },
         { conversation_id: conversationId, user_id: uid, role: 'assistant', content: reply },
-      ]);
+      ];
+      const meta = grounding.sources.length || grounding.queries.length ? { items: grounding.sources, queries: grounding.queries } : null;
+      if (meta) rows[1].sources = meta;
+      let { error: mErr } = await db.from('ai_messages').insert(rows);
+      if (mErr && meta && MISSING_COL(mErr)) { delete rows[1].sources; ({ error: mErr } = await db.from('ai_messages').insert(rows)); } // migration 0004 not applied yet
       if (mErr) console.error('messages_insert_failed', mErr.message);
       await db.from('ai_conversations').update({ updated_at: new Date().toISOString() }).eq('id', conversationId);
     }
@@ -541,6 +586,7 @@ async function handle(req: Request): Promise<Response> {
 
   return json(req, {
     conversation_id: conversationId, reply, ephemeral, scope, mode, output_type: outputType, truncated,
+    web: { available: scope === 'general' && s.web_search !== false, used: webUsed, sources: grounding.sources, queries: grounding.queries },
     usage: { today: used, limit: s.daily_limit },
     quota: { enabled: true, daily: dailyBlock(used as number, s.daily_limit), minute: minuteBlock(minute), server_time: new Date().toISOString() },
   });

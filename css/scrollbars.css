@@ -1,0 +1,33 @@
+/* =====================================================================
+   AF STUDIO — scrollbars & native controls in the site theme (whole platform)
+   • dark/light native widgets (no white scrollbar tracks on Windows)
+   • thin, almost invisible thumb; it becomes visible on hover
+   ===================================================================== */
+html { color-scheme: dark; }
+html:has(body.light) { color-scheme: light; }
+
+/* Firefox + Chromium 121+ */
+* { scrollbar-width: thin; scrollbar-color: rgba(236, 233, 227, .10) transparent; }
+*:hover { scrollbar-color: rgba(198, 160, 120, .38) transparent; }
+body.light * { scrollbar-color: rgba(31, 28, 24, .14) transparent; }
+body.light *:hover { scrollbar-color: rgba(156, 122, 85, .45) transparent; }
+
+/* WebKit / older Chromium / Safari */
+::-webkit-scrollbar { width: 8px; height: 8px; background: transparent; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+::-webkit-scrollbar-thumb { background: rgba(236, 233, 227, .10); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+*:hover::-webkit-scrollbar-thumb { background-color: rgba(198, 160, 120, .38); }
+::-webkit-scrollbar-thumb:active { background-color: rgba(198, 160, 120, .6); }
+body.light ::-webkit-scrollbar-thumb { background-color: rgba(31, 28, 24, .14); }
+body.light *:hover::-webkit-scrollbar-thumb { background-color: rgba(156, 122, 85, .45); }
+
+/* selections in the brand colours */
+::selection { background: rgba(198, 160, 120, .32); color: inherit; }
+
+/* text fields: no big rectangular outline (inherited from the original site's styles.css);
+   every field on the platform already shows focus with its own border / rounded container */
+body.af-app-on :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select):focus-visible,
+body.af-access-on :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select):focus-visible,
+.af-modal :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, select):focus-visible { outline: none; }
+.sc-input:focus, .sc-select:focus { box-shadow: 0 0 0 3px color-mix(in srgb, var(--af-gold) 12%, transparent); }
