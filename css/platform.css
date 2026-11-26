@@ -784,8 +784,6 @@ body.light .pr-card__img { background: linear-gradient(145deg, #e8e0d5, #c4a484)
 /* ---------------------------------------------------------------------
    SETTINGS
    --------------------------------------------------------------------- */
-.st { display: grid; gap: 18px; max-width: 880px; }
-.st-avatar { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; flex-wrap: wrap; }
 .af-card--danger { border-color: color-mix(in srgb, var(--af-err) 30%, transparent); }
 
 /* ---------------------------------------------------------------------

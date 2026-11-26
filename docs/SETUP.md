@@ -117,3 +117,15 @@ supabase secrets set RESEND_API_KEY=... MAIL_FROM="AF Studio <studio@ваш-до
 4. Проверка: `supabase/tests/3.0-settings-quota.test.sql` → `all_tests_passed = true` (выполняется с ROLLBACK).
 
 Новые секреты не нужны. Подробности — `docs/AF-3.0-REPORT.md`.
+
+
+## AF AI 3.1 и восстановление пароля
+
+1. SQL Editor → `supabase/migrations/20261126000003_ai_scope.sql` → все флаги `true`.
+2. Edge Functions → **ai-chat** → вставить `supabase/dashboard/ai-chat.ts` → Deploy (Verify JWT OFF).
+   Изменение файла в архиве само по себе опубликованную функцию не меняет.
+3. Authentication → Emails → **Reset Password** ← `supabase/email-templates/reset-password.html`
+   (по желанию Confirm signup ← `confirm-signup.html`). Site URL = `https://haniex.github.io/AF-STUDIO`.
+4. Authentication → Rate Limits — поднять лимиты входа и проверки кодов; для писем подключить SMTP.
+
+Подробности — `docs/AF-AI-3.1-REPORT.md`.

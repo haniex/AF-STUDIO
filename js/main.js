@@ -109,6 +109,7 @@ document.addEventListener('click', (e) => { if (e.target.closest('[data-reload]'
   auth.on('signedin', () => { if (!shell) showApp(); });
 
   if (res.recovery) return showAccess({ initialMode: 'reset' });
+  if (res.recoveryFailed) return showAccess({ initialMode: 'resetCode', message: { type: 'info', text: t('access.recoveryOtherBrowser') } });
   if (res.user) return showApp();
   if (res.urlError) return showAccess({ message: { type: 'err', text: t(res.urlError) } });
   if (res.flow === 'confirm') return showAccess({ message: { type: 'ok', text: t('access.confirmed') } });

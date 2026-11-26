@@ -4,7 +4,7 @@ import { html, raw, $, $$, icon, modal, setBusy, reducedMotion , sleep } from '.
 import { CONFIG, isConfigured } from '../config.js';
 import { mountAurum } from '../three/aurum.js';
 import {
-  signIn, signUp, resendConfirmation, requestPasswordReset, completePasswordReset, signInWithGoogle, authErrorKey,
+  signIn, signUp, resendConfirmation, requestPasswordReset, completePasswordReset, verifyRecoveryCode, signInWithGoogle, authErrorKey,
 } from '../core/auth.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -121,7 +121,7 @@ function renderCard() {
       <button type="button" role="tab" data-tab="register" aria-selected="${mode === 'register'}" class="${mode === 'register' ? 'is-on' : ''}">${t('access.register')}</button>
       <span class="acc-tabs__ink" style="transform:translateX(${mode === 'register' ? '100%' : '0'})"></span>
     </div>` : '';
-  const views = { login: viewLogin, register: viewRegister, forgot: viewForgot, reset: viewReset, confirm: viewConfirm, setup: viewSetup, entering: viewEntering };
+  const views = { login: viewLogin, register: viewRegister, forgot: viewForgot, reset: viewReset, resetCode: viewResetCode, confirm: viewConfirm, setup: viewSetup, entering: viewEntering };
   body.innerHTML = String(html`${tabs}${flash ? html`<div class="acc-flash acc-flash--${flash.type || 'info'}" role="status">${flash.text}</div>` : ''}<div class="acc-view">${views[mode]()}</div>`);
   flash = null;
   $$('[data-tab]', body).forEach((b) => b.addEventListener('click', () => { if (b.dataset.tab !== mode) { mode = b.dataset.tab; renderCard(); } }));
@@ -193,6 +193,7 @@ function viewForgot() {
       ${field('email', t('access.email'), 'email', `autocomplete="email" inputmode="email" required maxlength="254" value="${pendingEmail.replace(/"/g, '')}"`)}
       <p class="acc-form-err" role="alert"></p>
       <button class="acc-btn" type="submit"><span>${t('access.sendLink')}</span>${icon('send')}</button>
+      <p class="acc-switch"><button type="button" class="acc-link" data-go="resetCode">${t('access.haveCode')}</button></p>
       <p class="acc-switch"><button type="button" class="acc-link" data-go="login">${t('access.backToLogin')}</button></p>
     </form>`;
 }
@@ -206,6 +207,23 @@ function viewReset() {
       ${field('password2', t('access.password2'), 'password', 'autocomplete="new-password" required maxlength="128"')}
       <p class="acc-form-err" role="alert"></p>
       <button class="acc-btn" type="submit"><span>${t('access.resetBtn')}</span>${icon('check')}</button>
+    </form>`;
+}
+
+/** Reset with the 6-digit code from the email — works in any browser / device. */
+function viewResetCode() {
+  return html`
+    <h2 class="acc-h">${t('access.codeTitle')}</h2><p class="acc-sub">${t('access.codeSub')}</p>
+    <form class="acc-form" data-form="resetCode" novalidate>
+      ${field('email', t('access.email'), 'email', `autocomplete="email" inputmode="email" required maxlength="254" value="${pendingEmail.replace(/"/g, '')}"`)}
+      ${field('code', t('access.code'), 'text', 'autocomplete="one-time-code" inputmode="numeric" required maxlength="10" pattern="[0-9 ]*"')}
+      ${field('password', t('settings.newPwd'), 'password', 'autocomplete="new-password" required minlength="8" maxlength="128"')}
+      <div class="acc-meter" aria-hidden="true"><span></span><span></span><span></span><span></span><em></em></div>
+      ${field('password2', t('access.password2'), 'password', 'autocomplete="new-password" required maxlength="128"')}
+      <p class="acc-form-err" role="alert"></p>
+      <button class="acc-btn" type="submit"><span>${t('access.resetBtn')}</span>${icon('check')}</button>
+      <p class="acc-switch"><button type="button" class="acc-link" data-go="forgot">${t('access.resendCode')}</button></p>
+      <p class="acc-switch"><button type="button" class="acc-link" data-go="login">${t('access.backToLogin')}</button></p>
     </form>`;
 }
 
@@ -307,8 +325,15 @@ function bindForms(body) {
       if (kind === 'forgot') {
         pendingEmail = fd.email.trim();
         await requestPasswordReset(fd.email);
-        flash = { type: 'ok', text: t('access.forgotSent') };
-        mode = 'login'; renderCard(); return;
+        flash = { type: 'ok', text: t('access.forgotSentCode') };
+        mode = 'resetCode'; renderCard(); return; // link from the email OR the code on this screen
+      }
+      if (kind === 'resetCode') {
+        pendingEmail = fd.email.trim();
+        await verifyRecoveryCode(fd.email, fd.code);
+        await completePasswordReset(fd.password);
+        flash = { type: 'ok', text: t('access.resetDone') };
+        return enter();
       }
       if (kind === 'reset') {
         await completePasswordReset(fd.password);
@@ -336,7 +361,11 @@ function validate(form, kind, fd) {
     if (n.length < 2 || n.length > 60) bad('name', 'v.name');
     if (!fd.consent) { const p = $('#consent-err', form); p.textContent = t('v.consent'); ok = false; } else $('#consent-err', form).textContent = '';
   }
-  if (kind === 'register' || kind === 'reset') {
+  if (kind === 'resetCode') {
+    const c = String(fd.code || '').replace(/\s+/g, '');
+    if (!c) bad('code', 'v.required'); else if (!/^\d{6,10}$/.test(c)) bad('code', 'access.codeInvalid');
+  }
+  if (kind === 'register' || kind === 'reset' || kind === 'resetCode') {
     if (!fd.password) bad('password', 'v.required'); else if (fd.password.length < 8) bad('password', 'v.pwdMin');
     if (!fd.password2) bad('password2', 'v.required'); else if (fd.password !== fd.password2) bad('password2', 'v.pwdMatch');
   }

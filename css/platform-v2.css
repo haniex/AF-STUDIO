@@ -465,10 +465,6 @@ body.fx-reduced .cc-gem, body.fx-reduced .cc-ai__art i { animation: none !import
 .pd-main, .ba, .rv-stage { box-shadow: var(--af-shadow); }
 .bd-progress button i { height: 5px; }
 .st-section-title { display: flex; align-items: center; gap: 10px; }
-.st-meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
-.st-meta div { padding: 12px 14px; border-radius: 12px; background: var(--af-soft); border: 1px solid var(--af-line); }
-.st-meta small { display: block; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--af-muted); margin-bottom: 4px; }
-.st-meta b { font-size: 14px; font-weight: 600; word-break: break-all; }
 
 /* ---------------------------------------------------------------- reduced motion */
 body.fx-reduced *, body.fx-reduced *::before, body.fx-reduced *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }

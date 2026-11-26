@@ -33,7 +33,7 @@ export const NAV = [
     { path: '/files', key: 'files', icon: 'files' },
     { path: '/messages', key: 'messages', icon: 'messages', badge: 'messages' },
     { path: '/favorites', key: 'favorites', icon: 'heart' },
-    { path: '/settings', key: 'settings', icon: 'settings' },
+    // 3.1: «Настройки» убраны из бокового меню — они открываются только из меню аккаунта (и Ctrl + ,)
   ] },
 ];
 const MOBILE_TABS = ['/overview', '/portfolio', '/ai', '/projects'];

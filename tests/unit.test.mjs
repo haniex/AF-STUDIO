@@ -16,6 +16,8 @@ const P = await import('../js/core/preferences.js');
 const U = await import('../js/core/ai-usage.js');
 const S = await import('../js/components/settings-index.js');
 const A = await import('../js/core/alerts.js');
+const R = await import('../js/core/ai-render.js');
+const C = await import('../js/core/ai-chat-utils.js');
 const { readFileSync, readdirSync, statSync } = await import('node:fs');
 const { join, dirname } = await import('node:path');
 const { fileURLToPath } = await import('node:url');
@@ -299,7 +301,7 @@ test('settings index: every entry is bilingual, unique and in a known category',
 });
 
 test('i18n: every t() key used by the 3.0 modules exists in RU and EN', () => {
-  const files = ['js/components/settings-center.js', 'js/components/account-menu.js', 'js/components/help.js', 'js/components/usage-meter.js', 'js/app/shell.js', 'js/views/ai.js', 'js/views/projects.js', 'js/views/files.js', 'js/auth/access.js'];
+  const files = ['js/components/settings-center.js', 'js/components/account-menu.js', 'js/components/help.js', 'js/components/usage-meter.js', 'js/app/shell.js', 'js/views/ai.js', 'js/core/ai-render.js', 'js/views/projects.js', 'js/views/files.js', 'js/auth/access.js'];
   const ru = new Set(flatKeys(DICT.ru)); const en = new Set(flatKeys(DICT.en));
   const has = (set, key) => set.has(key) || [...set].some((k) => k.startsWith(key + '.')); // arrays/objects
   for (const f of files) {
@@ -324,4 +326,89 @@ test('security: the browser bundle never references server-only quota RPCs or se
     assert.ok(!/ai_rate_consume|ai_refund|ai_consume|service_role|sb_secret_|GEMINI_API_KEY\s*=/.test(src.replace(/\/\/.*$/gm, '')), 'server-only reference in ' + f);
     assert.ok(!/from\('ai_settings'\)/.test(src) || f.includes(join('js', 'admin')), 'ai_settings read outside admin: ' + f);
   }
+});
+
+
+// =====================================================================
+// AF AI 3.1 — rendering, export, history helpers, server prompt contract
+// =====================================================================
+test('ai render: code blocks are highlighted but always escaped (no XSS, nothing executable)', () => {
+  const evil = 'Here:\n```html\n<script>alert(1)</script><img src=x onerror=alert(2)>\n```\nand <b>bold</b> `x<y`';
+  const { html: out, blocks } = R.renderAnswer(evil);
+  const s = String(out);
+  assert.ok(!/<script|<img|<b>/i.test(s), 'raw tags must never pass through');
+  assert.ok(s.includes('&lt;script') && s.includes('class="ax-code"'));
+  assert.equal(blocks.length, 1); assert.equal(blocks[0].lang, 'html');
+  assert.ok(blocks[0].code.includes('<script>alert(1)</script>'), 'raw code kept for copy/download');
+  const js = R.highlight('const a = "x"; // note\nreturn 42;', 'javascript');
+  assert.ok(js.includes('<span class="tk-k">const</span>') && js.includes('<span class="tk-s">&quot;x&quot;</span>') && js.includes('<span class="tk-c">// note</span>') && js.includes('<span class="tk-n">42</span>'));
+  assert.ok(R.highlight('SELECT * FROM t WHERE id = 1', 'sql').includes('<span class="tk-k">SELECT</span>'));
+  assert.equal(R.highlight('<b>"q"</b>', 'unknownlang'), '&lt;b&gt;&quot;q&quot;&lt;/b&gt;');
+});
+
+test('ai render: unterminated fence, tables, blockquotes', () => {
+  const parts = R.splitBlocks('intro\n```py\nprint(1)\n');
+  assert.deepEqual(parts.map((p) => p.type), ['text', 'code']); assert.equal(parts[1].open, true);
+  const t = String(R.renderAnswer('| A | B |\n|---|:-:|\n| 1 | **2** |\n\n> quote').html);
+  assert.ok(t.includes('<table>') && t.includes('<th>A</th>') && t.includes('<strong>2</strong>') && t.includes('<blockquote>'));
+});
+
+test('ai export: extension allowlist, safe file names, plain text', () => {
+  assert.equal(R.extFor('python'), 'py'); assert.equal(R.extFor('tsx'), 'ts'); assert.equal(R.extFor('HTML'), 'html');
+  assert.equal(R.extFor('bash'), 'txt', 'not in allowlist → .txt'); assert.equal(R.extFor('exe'), 'txt'); assert.equal(R.extFor(''), 'txt');
+  const f = R.safeFileName('../../Мой <план>: запуск?', 'md');
+  assert.match(f, /^af-ai-[\p{L}\p{N}-]+-\d{4}-\d{2}-\d{2}\.md$/u); assert.ok(!f.includes('/') && !f.includes('..') && !f.includes('<'));
+  assert.ok(R.safeFileName('x', 'exe').endsWith('.txt'));
+  const txt = R.toPlainText('# Title\n**bold** and `code`\n```js\nlet a = 1;\n```');
+  assert.ok(txt.startsWith('Title') && txt.includes('bold and code') && txt.includes('let a = 1;') && !txt.includes('```'));
+});
+
+test('ai chat utils: date groups, search, effective scope', () => {
+  const now = new Date(2026, 10, 26, 22, 0);
+  const iso = (d) => d.toISOString();
+  const list = [
+    { id: 1, title: 'Сегодня', updated_at: iso(new Date(2026, 10, 26, 9)) },
+    { id: 2, title: 'Вчера ёлка', updated_at: iso(new Date(2026, 10, 25, 23)) },
+    { id: 3, title: 'Неделя', updated_at: iso(new Date(2026, 10, 21)) },
+    { id: 4, title: 'Месяц', updated_at: iso(new Date(2026, 10, 2)) },
+    { id: 5, title: 'Давно', updated_at: iso(new Date(2025, 0, 1)) },
+  ];
+  assert.deepEqual(C.groupByDate(list, now).map((g) => g.key), ['today', 'yesterday', 'week', 'month', 'older']);
+  assert.deepEqual(C.filterConversations(list, 'ЕЛКА').map((c) => c.id), [2]);
+  assert.equal(C.filterConversations(list, '').length, 5);
+  assert.equal(C.effectiveScope('chat', 'general'), 'general');
+  assert.equal(C.effectiveScope('create', 'af_studio'), 'af_studio');
+  assert.equal(C.effectiveScope('brief', 'general'), 'af_studio');
+  assert.equal(C.effectiveScope('estimate', 'general'), 'af_studio');
+  assert.equal(C.effectiveScope('chat', 'hacker'), 'general');
+});
+
+test('ai server contract: output types, scopes and prompts (ai-chat source)', () => {
+  const src = readFileSync(join(ROOT, 'supabase/functions/ai-chat/index.ts'), 'utf8');
+  const dash = readFileSync(join(ROOT, 'supabase/dashboard/ai-chat.ts'), 'utf8');
+  const types = JSON.parse(src.match(/export const OUTPUT_TYPES: OutputType\[\] = (\[[^\]]+\])/)[1].replace(/'/g, '"'));
+  assert.deepEqual(types, C.OUTPUT_TYPES, 'client and server output types match');
+  for (const ty of types) assert.ok(new RegExp(`\\b${ty}: \\{ en:`).test(src), 'instruction for ' + ty);
+  assert.ok(/MODES: Mode\[\] = \['chat', 'create', 'brief', 'estimate', 'builder_hint', 'moodboard'\]/.test(src), 'old modes kept + create');
+  assert.ok(src.includes("return json(req, { error: 'bad_output_type' }, 400)") && src.includes("return json(req, { error: 'bad_scope' }, 400)"));
+  const general = src.split('general: {')[1].split('af: {')[0];
+  assert.ok(!/ONLY the knowledge base|ТОЛЬКО из базы/.test(general), 'general prompt is not limited to the AF knowledge base');
+  assert.ok(/NOT limited to AF STUDIO/.test(general) && /no live web access/.test(general) && /Never claim that you ran code/.test(general));
+  assert.ok(src.includes("if (scope === 'af_studio') kb = await loadKnowledge(db, lang);"), 'AF knowledge loaded only for the AF scope');
+  assert.ok(/const scope: Scope = AF_MODES\.includes\(mode\) \? 'af_studio' : requested;/.test(src));
+  assert.ok(src.indexOf("ai_rate_consume") < src.indexOf("ai_consume', {") && src.includes('await refund(db, uid, day)'), 'every mode is rate-limited before the daily reservation');
+  assert.ok(/if \(mode === 'create'\) return Math\.min\(MAX_OUTPUT_TOKENS, style === 'concise' \? 2400 : 3500\)/.test(src));
+  assert.ok(dash.includes('buildSystem') && dash.includes("createClient") && !dash.includes("from '../_shared/util.ts'"), 'dashboard single-file version is in sync');
+});
+
+test('auth: recovery via token_hash / 6-digit code is wired', () => {
+  const auth = readFileSync(join(ROOT, 'js/core/auth.js'), 'utf8');
+  const acc = readFileSync(join(ROOT, 'js/auth/access.js'), 'utf8');
+  assert.ok(auth.includes("verifyOtp({ token_hash: tokenHash, type: otpType })") && auth.includes("type: 'recovery' })"));
+  assert.ok(auth.includes('recoveryFailed'));
+  assert.ok(acc.includes('resetCode: viewResetCode') && acc.includes("kind === 'resetCode'"));
+  const tpl = readFileSync(join(ROOT, 'supabase/email-templates/reset-password.html'), 'utf8');
+  assert.ok(tpl.includes('{{ .TokenHash }}') && tpl.includes('type=recovery') && tpl.includes('{{ .Token }}'));
+  const shell = readFileSync(join(ROOT, 'js/app/shell.js'), 'utf8');
+  assert.ok(!/path: '\/settings'/.test(shell), 'Settings is no longer a sidebar item');
 });

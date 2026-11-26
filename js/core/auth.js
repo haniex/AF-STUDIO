@@ -6,6 +6,7 @@ import { siteUrl } from '../config.js';
 import { setLang } from './i18n.js';
 import { authErrorKey } from './errors.js';
 
+const OTP_TYPES = ['recovery', 'signup', 'email', 'email_change', 'invite', 'magiclink'];
 const state = { user: null, profile: null, isAdmin: false, ready: false, recovery: false };
 const handlers = { signedin: new Set(), signedout: new Set(), recovery: new Set(), profile: new Set() };
 
@@ -75,7 +76,19 @@ export async function bootstrap() {
     }, 0);
   });
 
+  // Cross-device email links (template uses {{ .TokenHash }}): ?token_hash=…&type=recovery|signup|email…
+  // They do not depend on the browser that requested the email (unlike PKCE ?code=).
+  const tokenHash = url.searchParams.get('token_hash');
+  const otpType = url.searchParams.get('type');
+  let hashFlow = null; let hashError = null;
+  if (tokenHash && OTP_TYPES.includes(otpType)) {
+    const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: otpType });
+    if (error) hashError = error;
+    else hashFlow = otpType === 'recovery' ? 'recovery' : 'confirm';
+  }
+
   // getSession() also completes PKCE code exchange when ?code= is present.
+  const hadCode = url.searchParams.has('code');
   const { data: { session } } = await supabase.auth.getSession();
   let user = null;
   if (session) {
@@ -85,16 +98,23 @@ export async function bootstrap() {
   }
 
   // Clean auth params from the address bar
-  if (url.searchParams.has('code') || flow || urlError) {
-    ['code', 'flow', 'error', 'error_code', 'error_description', 'type'].forEach((k) => url.searchParams.delete(k));
+  if (hadCode || flow || urlError || tokenHash) {
+    ['code', 'flow', 'error', 'error_code', 'error_description', 'type', 'token_hash'].forEach((k) => url.searchParams.delete(k));
     history.replaceState(null, '', url.pathname + (url.search || '') + (urlError ? '' : location.hash));
   }
 
+  const effFlow = hashFlow || flow;
   state.user = user;
-  if (flow === 'recovery' && user) state.recovery = true;
+  if (effFlow === 'recovery' && user) state.recovery = true;
   if (user && !state.recovery) await loadProfile();
   state.ready = true;
-  return { user, flow, urlError: urlError ? 'errors.link_expired' : null, recovery: state.recovery };
+  // A recovery link that could not be completed in THIS browser (opened in another browser / app,
+  // expired, or already "clicked" by a mail scanner) → the reset screen with the e-mail code instead of a dead end.
+  const recoveryFailed = !user && (effFlow === 'recovery' || otpType === 'recovery' || (hadCode && flow === 'recovery'));
+  return {
+    user, flow: effFlow, recovery: state.recovery, recoveryFailed,
+    urlError: urlError || hashError ? 'errors.link_expired' : null,
+  };
 }
 
 // ---------------------------------------------------------------------
@@ -138,6 +158,16 @@ export async function requestPasswordReset(email) {
   setRemember(true); // the PKCE verifier must survive opening the link in a new tab
   const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: siteUrl('index.html?flow=recovery') });
   if (error && authErrorKey(error) !== 'errors.generic') throw error; // don't reveal whether the email exists
+}
+
+/** 6-digit code from the recovery email ({{ .Token }}) — works in any browser and on any device. */
+export async function verifyRecoveryCode(email, code) {
+  const token = String(code || '').replace(/\s+/g, '');
+  const { data, error } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token, type: 'recovery' });
+  if (error) throw error;
+  state.user = data?.user || data?.session?.user || state.user;
+  state.recovery = true;
+  return true;
 }
 
 export async function completePasswordReset(password) {
