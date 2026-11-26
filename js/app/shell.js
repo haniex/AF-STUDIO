@@ -6,6 +6,14 @@ import { supabase, signedUrl } from '../lib/supabase.js';
 import { listNotifications, markNotificationsRead } from '../core/api.js';
 import { navigate, refreshRoute } from '../core/router.js';
 import { applyTheme, getTheme } from '../core/theme.js';
+import { getPreferences, savePreferences, onPreferencesChange } from '../core/preferences.js';
+import { alertPlan, playTone, showBrowserNotification, browserPermission, bindUiSounds } from '../core/alerts.js';
+import { openSettingsCenter, isSettingsOpen } from '../components/settings-center.js';
+import { mountAccountMenu } from '../components/account-menu.js';
+import { openShortcuts } from '../components/help.js';
+
+// Sidebar collapse icon (same idea as a "panel" toggle): a frame with a left rail and a chevron
+const PANEL_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/><path class="af-panel-chev" d="m15.5 9.5-2.5 2.5 2.5 2.5"/></svg>';
 
 export const NAV = [
   { group: 'nav.groupStudio', items: [
@@ -30,7 +38,7 @@ export const NAV = [
 ];
 const MOBILE_TABS = ['/overview', '/portfolio', '/ai', '/projects'];
 
-let root; let channel; let offLang; let notifs = []; let unreadMsgs = 0; let docClick;
+let root; let channel; let offLang; let notifs = []; let unreadMsgs = 0; let docClick; let offPrefs; let menuCleanup = null;
 
 export function mountShell(el) {
   root = el;
@@ -45,11 +53,17 @@ export function mountShell(el) {
   };
   document.addEventListener('click', docClick);
   document.addEventListener('keydown', onKey);
+  offPrefs = onPreferencesChange(() => paintSideToggle());
+  window.addEventListener('af:onboarding', onTour);
+  bindUiSounds();
   return $('#af-view', root);
 }
 
 export function unmountShell() {
   offLang?.(); offLang = null;
+  offPrefs?.(); offPrefs = null;
+  menuCleanup?.(); menuCleanup = null;
+  window.removeEventListener('af:onboarding', onTour);
   if (channel) { supabase.removeChannel(channel); channel = null; }
   document.removeEventListener('click', docClick);
   document.removeEventListener('keydown', onKey);
@@ -58,10 +72,55 @@ export function unmountShell() {
   notifs = [];
 }
 
-const onKey = (e) => { if (e.key === 'Escape') { closePops(); document.body.classList.remove('af-nav-open'); } };
+// ---------------------------------------------------------------------
+// Keyboard: Esc, Ctrl/⌘+, (settings), [ (compact sidebar), ? (shortcuts), G→O/P/A/F/M
+// ---------------------------------------------------------------------
+let gAt = 0;
+const GO = { o: '/overview', p: '/projects', a: '/ai', f: '/files', m: '/messages' };
+const onKey = (e) => {
+  if (e.key === 'Escape') { closePops(); document.body.classList.remove('af-nav-open'); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key === ',') { e.preventDefault(); closePops(); openSettingsCenter(); return; }
+  const typing = e.target.closest?.('input, textarea, select, [contenteditable="true"], [contenteditable=""]');
+  if (typing || e.ctrlKey || e.metaKey || e.altKey || document.querySelector('.af-modal')) return;
+  const key = e.key.toLowerCase();
+  if (e.key === '[') { e.preventDefault(); toggleSidebar(); return; }
+  if (e.key === '?') { e.preventDefault(); openShortcuts(); return; }
+  if (key === 'g' || key === 'п') { gAt = Date.now(); return; }
+  if (gAt && Date.now() - gAt < 1200) {
+    const map = { щ: 'o', з: 'p', ф: 'a', а: 'f', ь: 'm' };
+    const to = GO[key] || GO[map[key]];
+    gAt = 0; if (to) { e.preventDefault(); navigate(to); }
+  }
+};
+const onTour = () => maybeOnboard(true);
+
+// ---------------------------------------------------------------------
+// Compact sidebar (account preference appearance.sidebar)
+// ---------------------------------------------------------------------
+const isCompact = () => getPreferences().appearance.sidebar === 'compact';
+const desktop = () => window.matchMedia('(min-width: 861px)').matches;
+async function toggleSidebar() {
+  if (!desktop()) { document.body.classList.toggle('af-nav-open'); return; }
+  const next = isCompact() ? 'expanded' : 'compact';
+  try { await savePreferences('appearance', { sidebar: next }); }
+  catch (err) {
+    // still let the user collapse the menu on this page view if the server is unreachable
+    document.documentElement.setAttribute('data-af-sidebar', next);
+    toast(t(err.code === 'not_installed' ? 'sc.err.notInstalled' : 'sc.err.sidebar'), 'err', 5000);
+  }
+  paintSideToggle();
+}
+function paintSideToggle() {
+  const compact = document.documentElement.getAttribute('data-af-sidebar') === 'compact';
+  $$('[data-side-toggle]', root).forEach((b) => {
+    b.setAttribute('aria-expanded', String(!compact));
+    b.setAttribute('aria-label', t(compact ? 'nav.expand' : 'nav.collapse'));
+    b.dataset.tip = t(compact ? 'nav.expand' : 'nav.collapse');
+  });
+}
 
 function navItem(it) {
-  return html`<a class="af-nav__item magnetic-soft" href="#${it.path}" data-path="${it.path}">
+  return html`<a class="af-nav__item magnetic-soft" href="#${it.path}" data-path="${it.path}" data-tip="${t('nav.' + it.key)}" ${it.path === '/settings' ? raw('data-open-settings') : ''}>
     ${icon(it.icon)}<span>${t('nav.' + it.key)}</span>${it.badge ? html`<em class="af-badge" data-badge="${it.badge}" hidden></em>` : ''}</a>`;
 }
 
@@ -72,23 +131,28 @@ function render() {
   root.innerHTML = String(html`
   <div class="af-shell">
     <aside class="af-side" aria-label="${t('nav.menu')}">
-      <a class="af-side__brand" href="#/overview"><span class="af-mark">AF</span><span class="af-side__studio">STUDIO</span></a>
-      <nav class="af-nav">
+      <div class="af-side__head">
+        <a class="af-side__brand" href="#/overview"><span class="af-mark">AF</span><span class="af-side__studio">STUDIO</span></a>
+        <button type="button" class="af-icon-btn af-side__toggle" data-side-toggle aria-controls="af-side-nav">${raw(PANEL_ICON)}</button>
+      </div>
+      <nav class="af-nav" id="af-side-nav">
         ${NAV.map((g) => html`<div class="af-nav__group"><p class="af-nav__label">${t(g.group)}</p>${g.items.map(navItem)}</div>`)}
-        ${auth.isAdmin ? html`<div class="af-nav__group"><a class="af-nav__item af-nav__item--admin" href="admin.html">${icon('admin')}<span>${t('nav.admin')}</span></a></div>` : ''}
+        ${auth.isAdmin ? html`<div class="af-nav__group"><a class="af-nav__item af-nav__item--admin" href="admin.html" data-tip="${t('nav.admin')}">${icon('admin')}<span>${t('nav.admin')}</span></a></div>` : ''}
       </nav>
-      <div class="af-side__foot">
-        <button type="button" class="af-side__user" data-pop="profile">
+      <div class="af-side__foot af-pop-wrap">
+        <button type="button" class="af-side__user" data-pop="account" aria-haspopup="menu" data-tip="${name}">
           <span class="af-avatar" data-avatar>${initials(name)}</span>
           <span class="af-side__who"><b>${name}</b><small>${auth.user?.email || ''}</small></span>
+          <span class="af-side__more" aria-hidden="true">${icon('more')}</span>
         </button>
+        <div class="af-pop af-pop--account af-pop--side" data-pop-panel="account" hidden></div>
       </div>
     </aside>
     <div class="af-scrim" data-close-nav></div>
 
     <div class="af-main">
       <header class="af-top">
-        <button type="button" class="af-icon-btn af-top__menu" data-open-nav aria-label="${t('nav.menu')}">${icon('menu')}</button>
+        <button type="button" class="af-icon-btn af-top__menu" data-side-toggle aria-label="${t('nav.menu')}">${raw(PANEL_ICON)}</button>
         <a class="af-top__logo" href="#/overview" aria-label="AF STUDIO">AF</a>
         <div class="af-top__title"><span class="af-top__crumb">AF STUDIO</span><h1 id="af-title">${t('nav.overview')}</h1></div>
         <div class="af-top__actions">
@@ -108,13 +172,7 @@ function render() {
           </div>
           <div class="af-pop-wrap">
             <button type="button" class="af-top__avatar" data-pop="profile" aria-label="${t('nav.profile')}"><span class="af-avatar" data-avatar>${initials(name)}</span></button>
-            <div class="af-pop af-pop--profile" data-pop-panel="profile" hidden>
-              <div class="af-pop__me"><span class="af-avatar af-avatar--lg" data-avatar>${initials(name)}</span><div><b>${name}</b><small>${auth.user?.email || ''}</small></div></div>
-              <a href="#/settings">${icon('settings')}<span>${t('nav.settings')}</span></a>
-              <a href="#/projects">${icon('projects')}<span>${t('nav.projects')}</span></a>
-              ${auth.isAdmin ? html`<a href="admin.html">${icon('admin')}<span>${t('nav.admin')}</span></a>` : ''}
-              <button type="button" data-logout class="af-pop__danger">${icon('logout')}<span>${t('nav.logout')}</span></button>
-            </div>
+            <div class="af-pop af-pop--account af-pop--top" data-pop-panel="profile" hidden></div>
           </div>
         </div>
       </header>
@@ -142,6 +200,13 @@ function render() {
   $('[data-mark-all]', root).addEventListener('click', async () => { await markNotificationsRead(); notifs.forEach((n) => (n.read_at = n.read_at || new Date().toISOString())); paintNotifs(); });
   $$('[data-logout]', root).forEach((b) => b.addEventListener('click', () => signOut()));
   $$('[data-open-nav]', root).forEach((b) => b.addEventListener('click', () => document.body.classList.add('af-nav-open')));
+  $$('[data-side-toggle]', root).forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); toggleSidebar(); }));
+  // Settings open as a central window over the current screen (route is not changed)
+  $$('[data-open-settings]', root).forEach((a) => a.addEventListener('click', (e) => {
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button === 1) return; // new tab still works via #/settings
+    e.preventDefault(); document.body.classList.remove('af-nav-open'); closePops(); openSettingsCenter();
+  }));
+  paintSideToggle();
   $('[data-close-nav]', root).addEventListener('click', () => document.body.classList.remove('af-nav-open'));
   $$('.af-nav a, .af-tabbar a', root).forEach((a) => a.addEventListener('click', () => document.body.classList.remove('af-nav-open')));
   if (keepView) $('#af-view', root).replaceWith(keepView);
@@ -153,23 +218,34 @@ function paintIdentity() {
   const p = auth.profile || {};
   const name = p.full_name || auth.user?.email || '';
   $$('.af-side__who b, .af-pop__me b', root).forEach((b) => (b.textContent = name));
+  $$('.af-side__user', root).forEach((b) => { b.dataset.tip = name; });
   $$('[data-avatar]', root).forEach((a) => (a.textContent = initials(name)));
   paintAvatar();
 }
 
 function togglePop(name, anchor) {
-  if (name === 'profile' && anchor.closest('.af-side')) { // sidebar user button → profile menu in top bar
-    name = 'profile';
-  }
   const panel = $(`[data-pop-panel="${name}"]`, root);
   const open = panel.hidden;
   closePops();
-  if (open) { panel.hidden = false; requestAnimationFrame(() => panel.classList.add('is-open')); if (name === 'notif') loadNotifications(); }
+  if (!open) return;
+  if (name === 'account' || name === 'profile') {
+    menuCleanup?.();
+    menuCleanup = mountAccountMenu(panel, { close: closePops });
+  }
+  panel.hidden = false; anchor?.setAttribute('aria-expanded', 'true');
+  requestAnimationFrame(() => panel.classList.add('is-open'));
+  if (name === 'notif') loadNotifications();
+  if (name === 'account' || name === 'profile') setTimeout(() => $('[role=menuitem]', panel)?.focus({ preventScroll: true }), 60);
 }
-function closePops() { $$('.af-pop', root || document).forEach((p) => { p.classList.remove('is-open'); p.hidden = true; }); }
+function closePops() {
+  $$('.af-pop', root || document).forEach((p) => { p.classList.remove('is-open'); p.hidden = true; });
+  $$('[data-pop][aria-expanded="true"]', root || document).forEach((b) => b.setAttribute('aria-expanded', 'false'));
+  menuCleanup?.(); menuCleanup = null;
+}
 
 /** Called by the router on every navigation */
 export function setActive(path, titleKey) {
+  if (path !== '/settings') sessionStorage.setItem('af.lastRoute', location.hash || '#/overview');
   $('#af-title', root) && ($('#af-title', root).textContent = t(titleKey));
   document.title = `${t(titleKey)} — AF STUDIO`;
   highlight(path);
@@ -263,9 +339,13 @@ function subscribeRealtime() {
       notifs.unshift(n); notifs = notifs.slice(0, 30);
       paintNotifs();
       if (n.type === 'message') { unreadMsgs++; paintBadges(); }
-      toast(notifText(n), 'info');
+      // 3.0: per-category pop-ups, sound, system notification and quiet hours (record always stays in the center)
+      const plan = alertPlan(n, getPreferences(), { hidden: document.visibilityState !== 'visible', permission: browserPermission() });
+      if (plan.toast) toast(notifText(n), 'info');
+      if (plan.sound) playTone('notify');
+      if (plan.browser) showBrowserNotification('AF STUDIO', notifText(n), n.link);
       const bell = $('.af-bell', root);
-      if (bell && !reducedMotion()) { bell.classList.remove('is-ring'); void bell.offsetWidth; bell.classList.add('is-ring'); }
+      if (bell && plan.toast && !reducedMotion()) { bell.classList.remove('is-ring'); void bell.offsetWidth; bell.classList.add('is-ring'); }
       window.dispatchEvent(new CustomEvent('af:notification', { detail: n }));
     })
     .subscribe();
@@ -274,8 +354,9 @@ function subscribeRealtime() {
 // ---------------------------------------------------------------------
 // Onboarding (first visit)
 // ---------------------------------------------------------------------
-async function maybeOnboard() {
-  if (!auth.profile || auth.profile.onboarded) return;
+async function maybeOnboard(force = false) {
+  if (!auth.profile || (auth.profile.onboarded && !force)) return;
+  if (isSettingsOpen()) return;
   const steps = [1, 2, 3];
   let i = 0;
   const body = document.createElement('div');

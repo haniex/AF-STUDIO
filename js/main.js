@@ -8,6 +8,8 @@ import { route, startRouter, stopRouter } from './core/router.js';
 import { $, reducedMotion } from './core/ui.js';
 import { applyPrefs } from './core/prefs.js';
 import { initFx } from './core/fx.js';
+import { loadPreferences, getPreferences, clearPreferences, applySnapshot } from './core/preferences.js';
+import { clearUsage } from './core/ai-usage.js';
 
 const ROUTES = [
   ['/overview', () => import('./views/overview.js'), 'nav.overview'],
@@ -61,13 +63,23 @@ async function showApp() {
   if (access) access.unmountAccess();
   authRoot.hidden = true;
   if (auth.profile?.theme) applyTheme(auth.profile.theme);
+  // 3.0: account preferences (appearance, workspace…) before the shell is painted.
+  // Never blocks access: on failure/timeout defaults are used and Settings offers a retry.
+  await Promise.race([loadPreferences(auth.user.id), new Promise((r) => setTimeout(r, 3500))]);
+  if (!auth.user) return; // signed out meanwhile — the signedout handler already showed AF Access
   shell = shell || (await import('./app/shell.js'));
+  import('./components/account-menu.js').then((m) => m.rememberAccount()).catch(() => {});
   appRoot.hidden = false;
   const view = shell.mountShell(appRoot);
   const back = sessionStorage.getItem('af.returnTo');
   sessionStorage.removeItem('af.returnTo');
   if (back && /^#\/[\w\-/?=&%.]*$/.test(back) && back !== location.hash) history.replaceState(null, '', back);
-  if (!location.hash || location.hash === '#') history.replaceState(null, '', '#/overview');
+  // Start page applies ONLY when the platform is opened without an explicit route
+  // (direct links, returnTo after sign-in, recovery links and reloads keep their route).
+  if (!location.hash || location.hash === '#') {
+    const sp = getPreferences().workspace.start_page;
+    history.replaceState(null, '', '#/' + (['overview', 'projects', 'ai', 'portfolio'].includes(sp) ? sp : 'overview'));
+  }
   startRouter(view, {
     onRouteChange: (r) => shell.setActive(location.hash.replace(/^#/, '').split('?')[0], r.meta.title),
     onAccessDenied: () => showAccess(),
@@ -81,6 +93,7 @@ document.addEventListener('click', (e) => { if (e.target.closest('[data-reload]'
 (async function start() {
   initTheme();
   applyPrefs();
+  applySnapshot(); // visual hint only (no flash); replaced by server data after sign-in
   initFx();
   applyI18n(document);
   if (location.hash.startsWith('#/')) sessionStorage.setItem('af.returnTo', location.hash);
@@ -91,7 +104,7 @@ document.addEventListener('click', (e) => { if (e.target.closest('[data-reload]'
   try { res = await bootstrap(); }
   catch (e) { console.error(e); return showAccess({ message: { type: 'err', text: t('errors.network') } }); }
 
-  auth.on('signedout', () => showAccess());
+  auth.on('signedout', () => { clearPreferences(); clearUsage(); showAccess(); });
   auth.on('recovery', () => showAccess({ initialMode: 'reset' }));
   auth.on('signedin', () => { if (!shell) showApp(); });
 

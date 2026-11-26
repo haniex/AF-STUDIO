@@ -6,6 +6,7 @@ import { getProject, getServices, projectHistory, listFiles, uploadFile, deleteF
 import { mountChat } from '../components/chat.js';
 import { mountReview } from '../components/review.js';
 import { STATUSES } from './projects.js';
+import { getPreferences } from '../core/preferences.js';
 
 const TABS = ['overview', 'files', 'review', 'messages', 'history'];
 
@@ -15,7 +16,8 @@ export async function render(el, { params, query }) {
   try { [p, services] = await Promise.all([getProject(params.id), getServices()]); } catch { el.innerHTML = String(errorState()); return; }
   if (!p) { el.innerHTML = String(emptyState(t('errors.not_found'), '', html`<a class="af-btn af-btn--ghost" href="#/projects">${t('projects.title')}</a>`)); return; }
   const svc = services.find((s) => s.id === p.service_id);
-  let tab = TABS.includes(query.tab) ? query.tab : 'overview';
+  const defTab = getPreferences().workspace.project_default_tab; // 3.0: default tab (explicit ?tab= wins)
+  let tab = TABS.includes(query.tab) ? query.tab : (TABS.includes(defTab) ? defTab : 'overview');
   let cleanup = null;
   const idx = STATUSES.indexOf(p.status);
 

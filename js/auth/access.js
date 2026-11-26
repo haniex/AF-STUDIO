@@ -34,6 +34,9 @@ export function mountAccess(el, { initialMode = 'login', message = null, onEnter
   root = el; onEnterCb = onEnter || onEnterCb;
   mode = !isConfigured() ? 'setup' : initialMode;
   flash = message;
+  // 3.0: "Switch / add account" from the account menu → friendly hint + prefilled email
+  const sw = sessionStorage.getItem('af.switch');
+  if (sw) { sessionStorage.removeItem('af.switch'); if (!flash && mode === 'login') flash = { type: 'info', text: t('acct.switchFlash') }; }
   document.body.classList.add('af-access-on');
   // Persistent full-screen space layer (survives language switches) + UI layer
   root.innerHTML = `<div class="acc-space" aria-hidden="true"><canvas class="acc-canvas"></canvas><span class="acc-shade"></span><span class="acc-grain"></span><span class="acc-flash"></span></div><div class="acc-ui"></div>`;
@@ -138,11 +141,17 @@ const field = (id, label, type = 'text', attrs = '') => html`
     <p class="acc-err" id="${id}-err" role="alert"></p>
   </div>`;
 
+const prefillEmail = () => {
+  const v = sessionStorage.getItem('af.loginEmail') || '';
+  sessionStorage.removeItem('af.loginEmail');
+  return /^[^\s@"<>]+@[^\s@"<>]+$/.test(v) ? v.slice(0, 254) : '';
+};
+
 function viewLogin() {
   return html`
     <h2 class="acc-h">${t('access.welcomeBack')}</h2><p class="acc-sub">${t('access.loginSub')}</p>
     <form class="acc-form" data-form="login" novalidate>
-      ${field('email', t('access.email'), 'email', 'autocomplete="email" inputmode="email" required maxlength="254"')}
+      ${field('email', t('access.email'), 'email', `autocomplete="email" inputmode="email" required maxlength="254" value="${prefillEmail()}"`)}
       ${field('password', t('access.password'), 'password', 'autocomplete="current-password" required maxlength="128"')}
       <div class="acc-row">
         <label class="acc-check"><input type="checkbox" name="remember" checked /><span class="acc-check__box">${icon('check')}</span><span>${t('access.remember')}</span></label>

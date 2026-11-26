@@ -105,3 +105,15 @@ supabase secrets set RESEND_API_KEY=... MAIL_FROM="AF Studio <studio@ваш-до
 Файлы в `images/` на GitHub Pages физически доступны по прямой ссылке (это статический хостинг).
 Тексты и структура портфолио уже закрыты (БД + RLS). Чтобы закрыть и сами картинки:
 загрузите их в AF Admin → Портфолио (бакет `portfolio-media`, приватный), затем удалите `images/` из репозитория.
+
+
+## AF STUDIO 3.0 — Settings Center и лимиты AF AI
+
+1. SQL Editor (автоперевод страницы выключить): по очереди выполнить
+   `supabase/migrations/20261126000001_user_preferences.sql` и `supabase/migrations/20261126000002_ai_quota.sql`
+   — в конце каждого файла проверочная строка, все значения должны быть `true`.
+2. Edge Functions → **ai-chat** → вставить `supabase/dashboard/ai-chat.ts` → Deploy (Verify JWT OFF).
+3. Edge Functions → **notify** → вставить `supabase/dashboard/notify.ts` (v4) → Deploy (Verify JWT OFF).
+4. Проверка: `supabase/tests/3.0-settings-quota.test.sql` → `all_tests_passed = true` (выполняется с ROLLBACK).
+
+Новые секреты не нужны. Подробности — `docs/AF-3.0-REPORT.md`.

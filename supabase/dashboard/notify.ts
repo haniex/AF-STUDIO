@@ -1,4 +1,4 @@
-// AF STUDIO — Edge Function «notify» v3 (single-file version for the Supabase dashboard editor).
+// AF STUDIO — Edge Function «notify» v4 (single-file version for the Supabase dashboard editor).
 // Paste the whole file into Edge Functions → notify → Code → index.ts and press Deploy. Turn OFF «Verify JWT».
 import { createClient, type SupabaseClient, type User } from 'jsr:@supabase/supabase-js@2';
 
@@ -61,7 +61,7 @@ export async function readJson<T>(req: Request, maxBytes = 64_000): Promise<T | 
 }
 
 // ---------------------------------------------------------------------
-// AF STUDIO — «notify»: delivers every new row of public.notifications
+// AF STUDIO — «notify» v4: delivers every new row of public.notifications
 //   • to the studio owner's Telegram (only notifications addressed to administrators)
 //   • by email via Resend (to any user who has email notifications enabled)
 // Triggered by a Supabase Database Webhook (table notifications, INSERT)
@@ -86,6 +86,43 @@ const STATUS: Record<string, string> = {
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const no = (n: unknown) => (n ? `AF-${String(n).padStart(5, '0')}` : '');
 const ok = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+// Notification type → user preference category (Settings → Notifications)
+const CATEGORY: Record<string, string> = {
+  project_created: 'project_updates', project_status: 'project_updates', project_done: 'project_updates',
+  message: 'messages', comment: 'approvals', review_request: 'approvals', review_decision: 'approvals',
+};
+const CRITICAL = ['project_status', 'project_done', 'review_request'];
+const HHMM = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+const toMin = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3, 5));
+/** Minutes since local midnight in an IANA zone (falls back to UTC). */
+function localMinutes(tz: string, now = new Date()): number {
+  try {
+    if (tz) {
+      const parts = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now);
+      const h = Number(parts.find((p) => p.type === 'hour')?.value ?? 'NaN'); const m = Number(parts.find((p) => p.type === 'minute')?.value ?? 'NaN');
+      if (Number.isFinite(h) && Number.isFinite(m)) return (h % 24) * 60 + m;
+    }
+  } catch (_) { /* invalid zone → UTC */ }
+  return now.getUTCHours() * 60 + now.getUTCMinutes();
+}
+export function inQuietHours(from: string, to: string, minutes: number): boolean {
+  if (!HHMM.test(from) || !HHMM.test(to)) return false;
+  const a = toMin(from); const b = toMin(to);
+  if (a === b) return false;
+  return a < b ? minutes >= a && minutes < b : minutes >= a || minutes < b; // window may wrap midnight
+}
+/** '' = email allowed; otherwise the reason it is skipped. */
+function emailBlockedByPrefs(type: string, np: Record<string, unknown>): string {
+  const cat = CATEGORY[type];
+  const ch = cat ? (np[cat] as Record<string, unknown> | undefined) : undefined;
+  if (ch && ch.email === false) return `email disabled by the user for category "${cat}"`;
+  if (np.quiet_enabled === true && !CRITICAL.includes(type)
+      && inQuietHours(String(np.quiet_from ?? ''), String(np.quiet_to ?? ''), localMinutes(String(np.quiet_tz ?? '')))) {
+    return 'quiet hours (non-critical email skipped; the notification stays in the app)';
+  }
+  return '';
+}
 
 Deno.serve(async (req) => {
   try {
@@ -161,9 +198,17 @@ Deno.serve(async (req) => {
     }
 
     // ------------------------------------------------------------ Email (Resend)
+    // 3.0: the global switch (profiles.notify_email) still rules; on top of it the user's
+    // per-category email choice and quiet hours from public.user_preferences are respected.
     const apiKey = Deno.env.get('RESEND_API_KEY'); const from = Deno.env.get('MAIL_FROM');
     if (!apiKey || !from) out.email = { skipped: 'RESEND_API_KEY / MAIL_FROM not set (optional)' };
+    let prefBlock = '';
     if (apiKey && from && profile?.email && profile.notify_email) {
+      const { data: up } = await db.from('user_preferences').select('notifications').eq('user_id', n.user_id).maybeSingle();
+      prefBlock = emailBlockedByPrefs(n.type, (up?.notifications ?? {}) as Record<string, unknown>);
+      if (prefBlock) out.email = { skipped: prefBlock };
+    }
+    if (apiKey && from && profile?.email && profile.notify_email && !prefBlock) {
       const lang: 'ru' | 'en' = profile.lang === 'en' ? 'en' : 'ru';
       const title = (TITLE[n.type] ?? { ru: 'Уведомление AF Studio', en: 'AF Studio notification' })[lang];
       const rows: string[] = [];

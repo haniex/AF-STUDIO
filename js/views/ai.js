@@ -4,11 +4,18 @@ import { supabase, callFunction } from '../lib/supabase.js';
 import { auth } from '../core/auth.js';
 import { navigate } from '../core/router.js';
 import { getDraft, saveDraft } from '../core/api.js';
+import { getPreferences } from '../core/preferences.js';
+import { setUsage, fetchUsage, fmtDuration } from '../core/ai-usage.js';
+import { mountUsage } from '../components/usage-meter.js';
+import { openSettingsCenter } from '../components/settings-center.js';
 
 let mode = 'chat';
 
 export async function render(el, { params }) {
   const convId = params.id || null;
+  const aiPrefs = getPreferences().ai;
+  mode = ['chat', 'brief', 'estimate'].includes(aiPrefs.default_mode) ? aiPrefs.default_mode : 'chat';
+  const ephemeral = aiPrefs.save_history === false;
   el.innerHTML = String(html`
   <div class="ai ${!convId && isMobile() ? '' : ''}">
     <aside class="ai-side">
@@ -34,13 +41,36 @@ export async function render(el, { params }) {
           <textarea name="q" rows="1" maxlength="4000" placeholder="${t('ai.placeholder')}" aria-label="${t('ai.placeholder')}"></textarea>
           <button type="submit" class="ai-send" aria-label="${t('common.send')}">${icon('send')}</button>
         </div>
-        <div class="ai-foot"><span>${t('ai.disclaimer')}</span><span data-usage></span></div>
+        <div class="ai-gate" data-gate hidden role="status" aria-live="polite"></div>
+        <div class="ai-foot"><span>${t('ai.disclaimer')}</span><div class="ai-usage" data-usage></div></div>
+        ${ephemeral ? html`<p class="ai-eph">${icon('lock')}<span>${t('usage.ephemeral')}</span><button type="button" class="af-link" data-ai-prefs>${t('nav.settings')}</button></p>` : ''}
       </form>
     </section>
   </div>`);
 
   const root = $('.ai', el); const body = $('[data-body]', el); const form = $('[data-form]', el); const ta = $('textarea', form);
   let conversationId = convId; let busy = false; let messages = [];
+  let blocked = null; // server-confirmed reason the send button is disabled: 'disabled' | 'daily' | 'minute'
+
+  // ---------------------------------------------------------------- quota gate (server numbers only)
+  const gate = $('[data-gate]', el); const sendBtn = $('.ai-send', form);
+  function applyGate(u) {
+    blocked = null; let msg = ''; let kind = 'info';
+    if (u) {
+      if (u.enabled === false) { blocked = 'disabled'; msg = t('errors.ai_disabled'); kind = 'err'; }
+      else if (u.daily.remaining === 0) { blocked = 'daily'; kind = 'err'; msg = t('usage.gateDaily', { time: u.daily.reset_in != null ? fmtDuration(u.daily.reset_in, getLang()) : '—' }); }
+      else if (u.minute && u.minute.remaining === 0 && u.minute.retry_after > 0) { blocked = 'minute'; kind = 'warn'; msg = t('usage.gateMinute', { time: fmtDuration(u.minute.retry_after, getLang()) }); }
+      else if (u.daily.remaining <= 3) { kind = 'warn'; msg = t('usage.gateLow', { n: u.daily.remaining }); }
+    }
+    gate.hidden = !msg; gate.className = `ai-gate ai-gate--${kind}`; gate.textContent = msg;
+    sendBtn.disabled = busy || !!blocked;
+    sendBtn.title = blocked ? msg : '';
+  }
+  const offUsage = mountUsage($('[data-usage]', el), {
+    variant: 'compact', extended: () => getPreferences().ai.extended_stats !== false, pollMs: 45000, maxAge: 0,
+    onState: (u) => applyGate(u),
+  });
+  $('[data-ai-prefs]', el)?.addEventListener('click', () => openSettingsCenter({ category: 'ai', focus: 'ai.save_history' }));
 
   // --------------------------------------------------------------- history list
   async function loadList() {
@@ -118,7 +148,7 @@ export async function render(el, { params }) {
 
   async function send() {
     const q = ta.value.trim();
-    if (!q || busy) return;
+    if (!q || busy || blocked) return;
     busy = true; $('.ai-send', form).disabled = true;
     if (!messages.length) body.innerHTML = '';
     messages.push({ role: 'user', content: q });
@@ -127,25 +157,37 @@ export async function render(el, { params }) {
     body.scrollTop = body.scrollHeight;
     ta.value = ''; autosize();
     try {
-      const res = await callFunction('ai-chat', { message: q, mode, lang: getLang(), conversation_id: conversationId || undefined });
-      const isNew = !conversationId && res.conversation_id;
-      conversationId = res.conversation_id || conversationId;
-      if (res.usage) $('[data-usage]', el).textContent = t('ai.usage', { used: res.usage.today, limit: res.usage.limit });
-      if (isNew) { history.replaceState(null, '', '#/ai/' + conversationId); $('[data-handoff]', el).disabled = false; $('[data-del]', el).disabled = false; }
-      // reload to get message ids (for "save")
-      const { data } = await supabase.from('ai_messages').select('id,role,content,saved').eq('conversation_id', conversationId).order('id');
-      messages = data && data.length ? data : [...messages, { role: 'assistant', content: res.reply }];
-      paint(); loadList();
+      const payload = { message: q, mode, lang: getLang(), conversation_id: (!ephemeral && conversationId) || undefined };
+      // "Don't save history": the current dialogue lives only in this tab and is sent back for context
+      if (ephemeral) payload.history = messages.slice(0, -1).slice(-12).map((m) => ({ role: m.role, content: String(m.content).slice(0, 4000) }));
+      const res = await callFunction('ai-chat', payload);
+      if (res.quota) setUsage(res.quota); else fetchUsage();
+      if (res.ephemeral || !res.conversation_id) {
+        messages = [...messages, { role: 'assistant', content: res.reply }];
+        paint();
+      } else {
+        const isNew = !conversationId && res.conversation_id;
+        conversationId = res.conversation_id || conversationId;
+        if (isNew) { history.replaceState(null, '', '#/ai/' + conversationId); $('[data-handoff]', el).disabled = false; $('[data-del]', el).disabled = false; }
+        // reload to get message ids (for "save")
+        const { data } = await supabase.from('ai_messages').select('id,role,content,saved').eq('conversation_id', conversationId).order('id');
+        messages = data && data.length ? data : [...messages, { role: 'assistant', content: res.reply }];
+        paint(); loadList();
+      }
     } catch (e) {
       const code = e.code || 'generic';
       messages.pop();
       $('[data-typing]', body)?.remove();
       const key = ['ai_disabled', 'ai_not_configured', 'daily_limit', 'rate_limited', 'provider_busy', 'provider_error', 'provider_timeout', 'too_long', 'network', 'server_config'].includes(code) ? 'errors.' + code : 'errors.generic';
       const tech = key === 'errors.generic' || key === 'errors.server_config' ? ` [${e.status || ''} ${code}${e.detail ? ': ' + e.detail : ''}]` : '';
-      toast(t(key, { limit: e.details?.limit || '' }) + tech, 'err', 12000);
+      // quota-related answers carry a fresh server snapshot → the meter and the gate update at once
+      if (e.details?.quota) setUsage(e.details.quota);
+      else if (['daily_limit', 'rate_limited', 'ai_disabled'].includes(code)) fetchUsage();
+      // network errors never zero the counters: the last confirmed snapshot stays, refresh is offered
+      toast(t(key, { limit: e.details?.limit || '' }) + tech + (e.details?.refunded ? ' ' + t('usage.refunded') : ''), 'err', code === 'rate_limited' ? 5000 : 12000);
       console.warn('[AF AI]', e.status, code, e.detail);
       ta.value = q; paint();
-    } finally { busy = false; $('.ai-send', form).disabled = false; ta.focus(); }
+    } finally { busy = false; $('.ai-send', form).disabled = !!blocked; ta.focus(); }
   }
 
   const autosize = () => { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 180) + 'px'; };
@@ -168,10 +210,9 @@ export async function render(el, { params }) {
     catch (err) { e.currentTarget.disabled = false; toast(t('errors.' + (err.code || 'generic')), 'err'); }
   });
 
-  // usage indicator
-  supabase.from('ai_usage').select('count').eq('user_id', auth.user.id).eq('day', new Date().toISOString().slice(0, 10)).maybeSingle()
-    .then(({ data }) => { if (data && $('[data-usage]', el)) $('[data-usage]', el).textContent = t('ai.usage', { used: data.count, limit: '…' }); });
+  if (ephemeral) $('[data-handoff]', el).disabled = true; // nothing is stored → nothing to hand over
 
   await Promise.all([loadList(), loadConversation()]);
   if (!convId) ta.focus();
+  return () => offUsage();
 }
